@@ -1,0 +1,133 @@
+import AppKit
+import SwiftUI
+
+struct SettingsView: View {
+    @ObservedObject var settings: SettingsStore
+    @ObservedObject var store: NotificationStore
+    let sendTest: () -> Void
+    let openFullDiskAccess: () -> Void
+    @State private var newBundleID = ""
+
+    private var appList: [String] {
+        let known = Set(store.knownBundleIDs.map { $0.lowercased() })
+        let all = known.union(settings.mutedApps)
+        return all.sorted { AppInfoProvider.shared.info(for: $0).name.localizedCaseInsensitiveCompare(AppInfoProvider.shared.info(for: $1).name) == .orderedAscending }
+    }
+
+    var body: some View {
+        Form {
+            Section("Source") {
+                LabeledContent("Status") {
+                    HStack(spacing: 6) {
+                        Circle().fill(statusColor).frame(width: 8, height: 8)
+                        Text(store.status.label)
+                    }
+                }
+                if store.status.needsFullDiskAccess {
+                    Text("Grant Full Disk Access to Notch.app, then relaunch it.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Open Full Disk Access Settings…", action: openFullDiskAccess)
+                }
+                if case .unavailable(let msg) = store.status {
+                    Text(msg).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                }
+            }
+
+            Section("Display") {
+                LabeledContent("Show for") {
+                    HStack {
+                        Slider(value: $settings.displayDuration, in: 2...10, step: 0.5)
+                            .frame(width: 180)
+                        Text(String(format: "%.1fs", settings.displayDuration))
+                            .monospacedDigit().frame(width: 40, alignment: .trailing)
+                    }
+                }
+                Toggle("Show on external displays", isOn: $settings.showOnExternalDisplays)
+                Toggle("Launch at login", isOn: Binding(
+                    get: { settings.launchAtLogin },
+                    set: { settings.setLaunchAtLogin($0) }))
+                if let err = settings.launchAtLoginError {
+                    Text(err).font(.caption).foregroundStyle(.orange)
+                }
+                Button("Send Test Notification", action: sendTest)
+            }
+
+            Section {
+                if appList.isEmpty {
+                    Text("Apps appear here once they've sent a notification.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(appList, id: \.self) { bundleID in
+                    let info = AppInfoProvider.shared.info(for: bundleID)
+                    Toggle(isOn: Binding(
+                        get: { settings.isMuted(bundleID) },
+                        set: { settings.setMuted(bundleID, $0) })) {
+                        HStack(spacing: 8) {
+                            Image(nsImage: info.icon).resizable().frame(width: 18, height: 18)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(info.name)
+                                Text(bundleID).font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                HStack {
+                    TextField("Bundle id, e.g. com.apple.mail", text: $newBundleID)
+                        .onSubmit(addMute)
+                    Button("Mute", action: addMute).disabled(newBundleID.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            } header: {
+                Text("Muted apps")
+            } footer: {
+                Text("Muted apps never light up the notch and are hidden from the list.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("History") {
+                LabeledContent("Stored", value: "\(store.history.count) notifications")
+                Button("Clear History", role: .destructive) { store.clearAll() }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460, height: 560)
+    }
+
+    private var statusColor: Color {
+        switch store.status {
+        case .running: return .green
+        case .starting: return .yellow
+        case .permissionDenied: return .orange
+        case .unavailable: return .red
+        }
+    }
+
+    private func addMute() {
+        let id = newBundleID.trimmingCharacters(in: .whitespaces)
+        guard !id.isEmpty else { return }
+        settings.setMuted(id, true)
+        newBundleID = ""
+    }
+}
+
+/// Hosts SettingsView in a normal titled window (the app has no Dock icon).
+@MainActor
+final class SettingsWindowController {
+    private var window: NSWindow?
+    private let makeView: () -> SettingsView
+
+    init(makeView: @escaping () -> SettingsView) { self.makeView = makeView }
+
+    func show() {
+        if window == nil {
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 560),
+                             styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            w.title = "Notch Settings"
+            w.isReleasedWhenClosed = false
+            w.contentView = NSHostingView(rootView: makeView())
+            w.center()
+            window = w
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+}
