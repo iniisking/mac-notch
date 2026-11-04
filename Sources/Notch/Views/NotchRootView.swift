@@ -4,6 +4,7 @@ struct NotchRootView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var store: NotificationStore
     @ObservedObject var settings: SettingsStore
+    @ObservedObject var player: NowPlayingService
 
     private var tint: Color {
         guard let n = vm.current else { return .white }
@@ -44,6 +45,16 @@ struct NotchRootView: View {
         switch vm.state {
         case .idle:
             Color.clear
+        case .music:
+            CompactMusicView(vm: vm, player: player)
+                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
+                                        removal: .opacity.animation(.easeIn(duration: 0.1))))
+                .contentShape(Rectangle())
+                .onTapGesture { vm.expand() }
+        case .musicPeek:
+            MusicPeekView(vm: vm, player: player)
+                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
+                                        removal: .opacity.animation(.easeIn(duration: 0.1))))
         case .compact:
             CompactView(vm: vm)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
@@ -57,7 +68,7 @@ struct NotchRootView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { vm.expand() }
         case .expanded:
-            ExpandedView(vm: vm, store: store, settings: settings)
+            ExpandedView(vm: vm, store: store, settings: settings, player: player)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
         }

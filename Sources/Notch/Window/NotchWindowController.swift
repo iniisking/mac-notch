@@ -13,11 +13,11 @@ final class NotchWindowController {
     private var monitors: [Any] = []
     private var cancellables = Set<AnyCancellable>()
 
-    init(screen: NSScreen, store: NotificationStore, settings: SettingsStore) {
+    init(screen: NSScreen, store: NotificationStore, settings: SettingsStore, player: NowPlayingService) {
         self.screen = screen
-        viewModel = NotchViewModel(geometry: .detect(for: screen), store: store, settings: settings)
+        viewModel = NotchViewModel(geometry: .detect(for: screen), store: store, settings: settings, player: player)
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: NotchViewModel.panelSize))
-        let root = NotchRootView(vm: viewModel, store: store, settings: settings)
+        let root = NotchRootView(vm: viewModel, store: store, settings: settings, player: player)
         let host = FirstMouseHostingView(rootView: root)
         host.frame = NSRect(origin: .zero, size: NotchViewModel.panelSize)
         host.autoresizingMask = [.width, .height]
@@ -80,7 +80,7 @@ final class NotchWindowController {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let state = self.viewModel.state
-                if (state == .expanded || state == .peek), !self.hitRect.contains(NSEvent.mouseLocation) {
+                if [.expanded, .peek, .musicPeek].contains(state), !self.hitRect.contains(NSEvent.mouseLocation) {
                     self.viewModel.collapse()
                 }
             }

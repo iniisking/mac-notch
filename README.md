@@ -13,6 +13,14 @@ own database instead of mirroring on-screen banners.
 - **Click (expanded)**: a larger panel with recent notifications grouped by app and the full
   body (scrollable, selectable), plus **Open app**, **Copy** and **Dismiss** actions.
   It collapses when the mouse leaves or you click elsewhere.
+- **Now Playing** (Spotify, YouTube Music, YouTube): while music plays, the notch shows the
+  album art fixed on the far left, the source logo fixed on the far right, and the title over
+  the artist in between, scrolling as a marquee when too long (on notch screens the text sits
+  beside the camera housing). Notifications take priority and then hand the notch back.
+  Hover for a card with a progress bar and previous / play-pause / next; the expanded panel
+  shows the same player above the notification list. Other players (Apple Music, podcasts,
+  random browser video/calls) are **ignored by default**; Settings › "Include other players"
+  shows them with a generic music-note icon.
 - **Menu-bar bell** (no Dock icon): Show Notifications, Send Test Notification, Settings, Quit.
 - **Settings**: per-app mute list, display duration, launch at login, show on external
   displays, test notification, source status, and clear history.
@@ -63,11 +71,36 @@ build/notch-dbcheck 20   # newest 20
 This is a separate binary, so the app you run it from (e.g. Terminal) needs its own
 Full Disk Access grant. It exits with code 2 when access is denied.
 
+### Now Playing: how and what permissions
+
+Since macOS 15.4 the private MediaRemote framework only answers Apple-entitled processes.
+Notch therefore runs `/usr/bin/perl` (which is entitled) with `Contents/Resources/notch-media.pl`,
+which loads Notch's own helper library `libNotchMedia.dylib` (`Sources/NotchMedia/`) and streams
+JSON now-playing updates (title, artist, album, artwork, playing state, elapsed/duration, source
+bundle id). Play/pause/next/previous go through the same helper. This is the same technique as the
+open-source [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter) (BSD-3), written
+independently and minimally here; nothing third-party is bundled. Check it any time with:
+
+```bash
+/usr/bin/perl build/Notch.app/Contents/Resources/notch-media.pl \
+  "$PWD/build/Notch.app/Contents/Resources/libNotchMedia.dylib" get
+```
+
+Source detection: Spotify is recognised by bundle id; installed YouTube/YouTube Music web apps by
+their app name. When the player is a **browser** (Chrome, Arc, Edge, Brave, Safari, …) Notch asks
+it for its tab URLs/titles via AppleScript: `music.youtube.com` → YouTube Music, `youtube.com` →
+YouTube. **macOS shows a one-time prompt "Notch wants to control <Browser>"** the first time this
+happens for each browser; if you click Don't Allow, browser playback is treated as "other" (hidden
+by default). Re-enable in System Settings › Privacy & Security › Automation › Notch.
+If the MediaRemote helper ever stops working, Notch falls back to Spotify's AppleScript
+dictionary (this triggers a one-time "control Spotify" prompt).
+
 ### Testing the UI without real notifications
 
 - Menu bar › **Send Test Notification** (⌘T while the menu is open), or the same button in Settings.
 - Launch flags: `open build/Notch.app --args --demo` injects three test notifications;
-  `--expand` opens the expanded panel; `--peek` pins the hover card open (for screenshots only).
+  `--expand` opens the expanded panel; `--peek` pins the hover card open (for screenshots only);
+  `--demo-music[=spotify|youtubemusic|youtube]` shows a fake track (stops the real helper).
 
 ## How it works
 
@@ -82,6 +115,8 @@ Sources/
     ViewModel/NotchViewModel      idle / compact / peek / expanded state machine, queue, timers
     Views/                        NotchShape, NotchRootView, CompactView, PeekView, ExpandedView
     Settings/                     SettingsStore, SettingsView, OnboardingWindow
+    NowPlaying/                   NowPlayingService (helper process + Spotify fallback), SourceClassifier, models
+  NotchMedia/                     libNotchMedia.dylib (MediaRemote via perl) + notch-media.pl
   notch-dbcheck/main.swift        CLI
 ```
 
@@ -109,7 +144,9 @@ Sources/
   `body` empty.
 - Only notifications that Notification Center stores are visible. Apps that turned off
   "Show in Notification Center" may never create a row.
-- The light-up state briefly covers menu-bar items next to the notch.
+- The light-up and now-playing states cover menu-bar items next to the notch.
+- Now Playing relies on private MediaRemote behaviour; a future macOS could close the perl route.
+  YouTube vs YouTube Music in a browser is a best guess from open tab URLs/titles.
 - Hover detection uses global mouse-move monitoring, which needs no extra permission.
   Keyboard shortcuts aren't supported.
 - Personal use only. It isn't sandboxed and isn't suitable for the App Store.

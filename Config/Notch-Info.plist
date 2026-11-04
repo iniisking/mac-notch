@@ -26,6 +26,8 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Notch reads your browser's tab addresses to tell YouTube from YouTube Music.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Personal use.</string>
 	<key>NSPrincipalClass</key>

@@ -16,6 +16,14 @@ final class SettingsStore: ObservableObject {
     @Published var showOnExternalDisplays: Bool {
         didSet { defaults.set(showOnExternalDisplays, forKey: "showOnExternalDisplays") }
     }
+    /// Show Spotify / YouTube Music / YouTube playback in the notch.
+    @Published var nowPlayingEnabled: Bool {
+        didSet { defaults.set(nowPlayingEnabled, forKey: "nowPlayingEnabled") }
+    }
+    /// Also show players other than Spotify / YouTube Music / YouTube (with a generic icon).
+    @Published var showOtherPlayers: Bool {
+        didSet { defaults.set(showOtherPlayers, forKey: "showOtherPlayers") }
+    }
     @Published private(set) var launchAtLogin: Bool
     @Published private(set) var launchAtLoginError: String?
 
@@ -24,6 +32,8 @@ final class SettingsStore: ObservableObject {
         let d = defaults.double(forKey: "displayDuration")
         displayDuration = d > 0 ? d : 4
         showOnExternalDisplays = defaults.bool(forKey: "showOnExternalDisplays")
+        nowPlayingEnabled = defaults.object(forKey: "nowPlayingEnabled") as? Bool ?? true
+        showOtherPlayers = defaults.bool(forKey: "showOtherPlayers")
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

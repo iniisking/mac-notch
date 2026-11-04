@@ -5,6 +5,7 @@ import Combine
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let settings = SettingsStore()
     private lazy var store = NotificationStore(settings: settings)
+    private lazy var player = NowPlayingService(settings: settings)
     private let source = DBNotificationSource()
     private var controllers: [CGDirectDisplayID: NotchWindowController] = [:]
     private var statusItem: NSStatusItem?
@@ -12,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var onboardingShown = false
 
     private lazy var settingsWindow = SettingsWindowController { [unowned self] in
-        SettingsView(settings: self.settings, store: self.store,
+        SettingsView(settings: self.settings, store: self.store, player: self.player,
                      sendTest: { [unowned self] in self.store.injectTest() },
                      openFullDiskAccess: { [unowned self] in self.openFullDiskAccess() })
     }
@@ -44,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .sink { [weak self] status in self?.statusChanged(status) }
             .store(in: &cancellables)
 
+        _ = player   // starts the now-playing helper when enabled
         source.onEvent = { [weak self] event in self?.store.handle(event) }
         source.start()
 
@@ -55,6 +57,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     self?.store.injectTest()
                 }
             }
+        }
+        if let demo = args.first(where: { $0.hasPrefix("--demo-music") }) {
+            let kind = demo.split(separator: "=").dropFirst().first.map(String.init) ?? "spotify"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.player.debugDemo(kind) }
         }
         if args.contains("--peek") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
@@ -88,7 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 existing.update(screen: screen)
                 keep[id] = existing
             } else {
-                let c = NotchWindowController(screen: screen, store: store, settings: settings)
+                let c = NotchWindowController(screen: screen, store: store, settings: settings, player: player)
                 c.viewModel.openSettings = { [weak self] in self?.settingsWindow.show() }
                 c.viewModel.openFullDiskAccess = { [weak self] in self?.openFullDiskAccess() }
                 keep[id] = c

@@ -21,6 +21,17 @@ targets:
     sources:
       - path: Sources/Notch
       - path: Sources/Shared
+      - path: Sources/NotchMedia/notch-media.pl
+        buildPhase: resources
+    dependencies:
+      # Embedded but NOT linked: /usr/bin/perl loads it at runtime (see Sources/NotchMedia).
+      - target: NotchMedia
+        embed: true
+        link: false
+    entitlements:
+      path: Config/Notch.entitlements
+      properties:
+        com.apple.security.automation.apple-events: true
     info:
       path: Config/Notch-Info.plist
       properties:
@@ -33,6 +44,7 @@ targets:
         LSApplicationCategoryType: public.app-category.utilities
         NSPrincipalClass: NSApplication
         NSHumanReadableCopyright: "Personal use."
+        NSAppleEventsUsageDescription: "Notch reads your browser's tab addresses to tell YouTube from YouTube Music."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.theajstars.notch
@@ -49,3 +61,18 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.theajstars.notch.dbcheck
         PRODUCT_NAME: notch-dbcheck
+  NotchMedia:
+    type: library.dynamic
+    platform: macOS
+    sources:
+      - path: Sources/NotchMedia
+        excludes: ["*.pl"]
+    dependencies:
+      - sdk: Foundation.framework
+    settings:
+      base:
+        PRODUCT_NAME: NotchMedia
+        EXECUTABLE_PREFIX: lib
+        CLANG_ENABLE_OBJC_ARC: YES
+        DYLIB_INSTALL_NAME_BASE: "@rpath"
+        SKIP_INSTALL: YES

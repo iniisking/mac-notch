@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var store: NotificationStore
+    @ObservedObject var player: NowPlayingService
     let sendTest: () -> Void
     let openFullDiskAccess: () -> Void
     @State private var newBundleID = ""
@@ -31,6 +32,21 @@ struct SettingsView: View {
                 if case .unavailable(let msg) = store.status {
                     Text(msg).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
+            }
+
+            Section {
+                Toggle("Show now playing in the notch", isOn: $settings.nowPlayingEnabled)
+                Toggle("Include other players (generic icon)", isOn: $settings.showOtherPlayers)
+                    .disabled(!settings.nowPlayingEnabled)
+                LabeledContent("Helper", value: player.status)
+                if let info = player.info {
+                    LabeledContent("Current", value: "\(info.title) — \(player.source?.displayName ?? "detecting…")")
+                }
+            } header: {
+                Text("Now Playing")
+            } footer: {
+                Text("Spotify, YouTube Music and YouTube. In a browser, Notch asks the browser for its tab URLs to tell YouTube from YouTube Music (macOS asks for Automation permission once).")
+                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Section("Display") {
@@ -89,7 +105,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 560)
+        .frame(width: 460, height: 640)
     }
 
     private var statusColor: Color {
@@ -119,7 +135,7 @@ final class SettingsWindowController {
 
     func show() {
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 560),
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 640),
                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
             w.title = "Notch Settings"
             w.isReleasedWhenClosed = false

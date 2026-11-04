@@ -5,7 +5,7 @@ import SwiftUI
 /// UI state for one notch window (one per screen). History lives in the shared NotificationStore.
 @MainActor
 final class NotchViewModel: ObservableObject {
-    enum State: Equatable { case idle, compact, peek, expanded }
+    enum State: Equatable { case idle, music, compact, peek, musicPeek, expanded }
 
     @Published private(set) var state: State = .idle
     @Published private(set) var current: NotchNotification?
@@ -16,10 +16,12 @@ final class NotchViewModel: ObservableObject {
 
     let store: NotificationStore
     let settings: SettingsStore
+    let player: NowPlayingService
     var openSettings: () -> Void = {}
     var openFullDiskAccess: () -> Void = {}
 
     static let wing: CGFloat = 150
+    static let musicWing: CGFloat = 170
     /// Size of the panel that hosts the shape; big enough for the expanded state plus glow.
     static let panelSize = CGSize(width: 720, height: 470)
 
@@ -29,10 +31,20 @@ final class NotchViewModel: ObservableObject {
     private(set) var isHovering = false
     private var cancellables = Set<AnyCancellable>()
 
-    init(geometry: NotchGeometry, store: NotificationStore, settings: SettingsStore) {
+    init(geometry: NotchGeometry, store: NotificationStore, settings: SettingsStore, player: NowPlayingService) {
         self.geometry = geometry
         self.store = store
         self.settings = settings
+        self.player = player
+        // Music comes and goes underneath notifications.
+        player.$showInNotch
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                if self.state == .idle || self.state == .music { self.state = self.restingState }
+            }
+            .store(in: &cancellables)
         store.arrivals
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.enqueue($0) }
@@ -44,8 +56,8 @@ final class NotchViewModel: ObservableObject {
     var topRadius: CGFloat {
         switch state {
         case .idle: return 6
-        case .compact: return 8
-        case .peek: return 12
+        case .music, .compact: return 8
+        case .peek, .musicPeek: return 12
         case .expanded: return 14
         }
     }
@@ -53,8 +65,8 @@ final class NotchViewModel: ObservableObject {
     var bottomRadius: CGFloat {
         switch state {
         case .idle: return 8
-        case .compact: return 12
-        case .peek: return 20
+        case .music, .compact: return 12
+        case .peek, .musicPeek: return 20
         case .expanded: return 26
         }
     }
@@ -65,7 +77,9 @@ final class NotchViewModel: ObservableObject {
         switch state {
         case .idle: return CGSize(width: w + 2 * topRadius, height: h)
         case .compact: return CGSize(width: compactWidth, height: h)
+        case .music: return CGSize(width: w + 2 * topRadius + 2 * Self.musicWing, height: h)
         case .peek: return CGSize(width: max(compactWidth, 470), height: h + 112)
+        case .musicPeek: return CGSize(width: max(w + 2 * topRadius + 2 * Self.musicWing, 480), height: h + 118)
         case .expanded: return CGSize(width: 660, height: 430)
         }
     }
@@ -88,13 +102,16 @@ final class NotchViewModel: ObservableObject {
     private func enqueue(_ n: NotchNotification) {
         queue.append(n)
         pendingCount = queue.count
-        if state == .idle { showNext() }
+        if state == .idle || state == .music { showNext() }
     }
+
+    /// What the notch shows when nothing else is going on.
+    var restingState: State { player.showInNotch ? .music : .idle }
 
     private func showNext() {
         compactWork?.cancel()
         guard !queue.isEmpty else {
-            state = .idle
+            state = restingState
             return
         }
         current = queue.removeFirst()
@@ -133,7 +150,7 @@ final class NotchViewModel: ObservableObject {
         } else {
             let work = DispatchWorkItem { [weak self] in
                 guard let self, !self.isHovering else { return }
-                if self.state == .peek || self.state == .expanded { self.collapse() }
+                if [.peek, .musicPeek, .expanded].contains(self.state) { self.collapse() }
             }
             hoverWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
@@ -146,10 +163,17 @@ final class NotchViewModel: ObservableObject {
         case .compact:
             compactWork?.cancel()
             state = .peek
+        case .music:
+            state = .musicPeek
         case .idle:
-            current = store.visibleHistory.first
-            state = .peek
-        case .peek, .expanded:
+            // A paused session can still be controlled from the idle notch.
+            if player.hasSession {
+                state = .musicPeek
+            } else {
+                current = store.visibleHistory.first
+                state = .peek
+            }
+        case .peek, .musicPeek, .expanded:
             break
         }
     }
@@ -167,6 +191,6 @@ final class NotchViewModel: ObservableObject {
     }
 
     func collapse() {
-        if queue.isEmpty { state = .idle } else { showNext() }
+        if queue.isEmpty { state = restingState } else { showNext() }
     }
 }

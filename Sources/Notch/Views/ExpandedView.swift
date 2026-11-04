@@ -6,6 +6,7 @@ struct ExpandedView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var store: NotificationStore
     @ObservedObject var settings: SettingsStore
+    @ObservedObject var player: NowPlayingService
     @State private var copiedID: String?
 
     private struct AppGroup: Identifiable {
@@ -56,6 +57,13 @@ struct ExpandedView: View {
                 .frame(width: sideWidth)
             }
             .frame(height: max(g.notchSize.height, 28))
+
+            if player.hasSession {
+                PlayerControlsView(player: player, artSize: 52)
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.07)))
+                    .padding(.top, 6)
+            }
 
             if store.status.needsFullDiskAccess {
                 FullDiskAccessPrompt(action: vm.openFullDiskAccess)

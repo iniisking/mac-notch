@@ -51,7 +51,12 @@ fi
 echo "==> Signing with identity: $IDENTITY"
 codesign --force --options runtime --timestamp=none --sign "$IDENTITY" \
   --identifier com.theajstars.notch.dbcheck "$BUILD/notch-dbcheck"
-codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$BUILD/Notch.app"
+# Nested code first: the MediaRemote helper library that /usr/bin/perl loads.
+find "$BUILD/Notch.app/Contents" -name "*.dylib" -print0 | while IFS= read -r -d '' lib; do
+  codesign --force --options runtime --timestamp=none --sign "$IDENTITY" "$lib"
+done
+codesign --force --options runtime --timestamp=none --sign "$IDENTITY" \
+  --entitlements "$ROOT/Config/Notch.entitlements" "$BUILD/Notch.app"
 codesign --verify --strict --verbose=1 "$BUILD/Notch.app"
 echo "    $(codesign -dvv "$BUILD/Notch.app" 2>&1 | grep -E '^Authority=' | head -1)"
 
