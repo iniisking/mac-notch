@@ -2,15 +2,15 @@
 # Loads libNotchMedia.dylib into /usr/bin/perl, which macOS still lets use the
 # private MediaRemote framework, and runs one command.
 #
-#   /usr/bin/perl notch-media.pl /path/to/libNotchMedia.dylib stream|get|send N
+#   /usr/bin/perl notch-media.pl /path/to/libNotchMedia.dylib stream|get|send N|seek SECONDS
 use strict;
 use warnings;
 use DynaLoader;
 
 my ($lib, $cmd, $arg) = @ARGV;
-die "usage: notch-media.pl LIB stream|get|send N\n" unless defined $lib && defined $cmd;
+die "usage: notch-media.pl LIB stream|get|send N|seek SECONDS\n" unless defined $lib && defined $cmd;
 
-my %symbols = (stream => 'notch_media_stream', get => 'notch_media_get', send => 'notch_media_send');
+my %symbols = (stream => 'notch_media_stream', get => 'notch_media_get', send => 'notch_media_send', seek => 'notch_media_seek');
 my $symbol = $symbols{$cmd} or die "unknown command: $cmd\n";
 $ENV{NOTCH_MEDIA_ARG} = defined $arg ? $arg : '';
 

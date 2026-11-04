@@ -17,6 +17,7 @@ final class NotchViewModel: ObservableObject {
     let store: NotificationStore
     let settings: SettingsStore
     let player: NowPlayingService
+    let lyrics: LyricsService
     var openSettings: () -> Void = {}
     var openFullDiskAccess: () -> Void = {}
 
@@ -34,11 +35,13 @@ final class NotchViewModel: ObservableObject {
     private(set) var isHovering = false
     private var cancellables = Set<AnyCancellable>()
 
-    init(geometry: NotchGeometry, store: NotificationStore, settings: SettingsStore, player: NowPlayingService) {
+    init(geometry: NotchGeometry, store: NotificationStore, settings: SettingsStore,
+         player: NowPlayingService, lyrics: LyricsService) {
         self.geometry = geometry
         self.store = store
         self.settings = settings
         self.player = player
+        self.lyrics = lyrics
         // Music comes and goes underneath notifications.
         player.$showInNotch
             .removeDuplicates()
@@ -96,6 +99,16 @@ final class NotchViewModel: ObservableObject {
     }
 
     static let labelFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    static let lyricStripHeight: CGFloat = 20
+
+    /// Lyric line under the compact music notch (hidden in gaps / without lyrics).
+    var showsLyricStrip: Bool {
+        state == .music && settings.showLyrics && settings.showLyricStrip && lyrics.currentLine != nil
+    }
+
+    private var peekLyricsHeight: CGFloat {
+        settings.showLyrics && lyrics.state != .off ? 70 : 0
+    }
 
     /// (left wing, right wing) for the compact states.
     var wings: (CGFloat, CGFloat) {
@@ -111,9 +124,10 @@ final class NotchViewModel: ObservableObject {
         case .idle: return CGSize(width: w + 2 * topRadius, height: h)
         case .compact, .music:
             let (l, r) = wings
-            return CGSize(width: w + 2 * topRadius + l + r, height: h)
+            let strip = showsLyricStrip ? Self.lyricStripHeight : 0
+            return CGSize(width: w + 2 * topRadius + l + r, height: h + strip)
         case .peek: return CGSize(width: max(w + 2 * topRadius + 2 * 150, 470), height: h + 112)
-        case .musicPeek: return CGSize(width: 480, height: h + 118)
+        case .musicPeek: return CGSize(width: 480, height: h + 118 + peekLyricsHeight)
         case .expanded: return CGSize(width: 660, height: 430)
         }
     }

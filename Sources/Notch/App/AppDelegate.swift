@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let settings = SettingsStore()
     private lazy var store = NotificationStore(settings: settings)
     private lazy var player = NowPlayingService(settings: settings)
+    private lazy var lyrics = LyricsService(player: player, settings: settings)
     private let source = DBNotificationSource()
     private var controllers: [CGDirectDisplayID: NotchWindowController] = [:]
     private var statusItem: NSStatusItem?
@@ -46,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .store(in: &cancellables)
 
         _ = player   // starts the now-playing helper when enabled
+        _ = lyrics
         source.onEvent = { [weak self] event in self?.store.handle(event) }
         source.start()
 
@@ -115,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 existing.update(screen: screen)
                 keep[id] = existing
             } else {
-                let c = NotchWindowController(screen: screen, store: store, settings: settings, player: player)
+                let c = NotchWindowController(screen: screen, store: store, settings: settings, player: player, lyrics: lyrics)
                 c.viewModel.openSettings = { [weak self] in self?.settingsWindow.show() }
                 c.viewModel.openFullDiskAccess = { [weak self] in self?.openFullDiskAccess() }
                 keep[id] = c

@@ -203,36 +203,35 @@ struct PlayingBars: View {
 
 // MARK: - Compact (closed notch) player
 
-/// Dynamic-Island sized: album art in the left wing, source logo in the right wing
-/// (alternating with level bars while playing). Title/artist live in the hover card.
+/// Dynamic-Island sized: album art in the left wing, source logo in the right wing. When lyrics
+/// are on, the current line sits in a slim strip under the notch (same width).
 struct CompactMusicView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var player: NowPlayingService
+    @ObservedObject var lyrics: LyricsService
 
     var body: some View {
         let g = vm.geometry
         let h = g.notchSize.height
         let (left, right) = vm.wings
         if let info = player.info {
-            HStack(spacing: 0) {
-                ArtworkView(image: info.artwork, size: h - 12, corner: 5)
-                    .frame(width: left)
-                Color.clear.frame(width: g.notchSize.width)
-                TimelineView(.periodic(from: .now, by: 4)) { ctx in
-                    let showBars = info.isPlaying && Int(ctx.date.timeIntervalSinceReferenceDate / 4) % 2 == 1
-                    ZStack {
-                        if showBars {
-                            PlayingBars(playing: true, color: .white.opacity(0.85)).transition(.opacity)
-                        } else {
-                            SourceLogo(source: player.source, size: min(20, h - 14)).transition(.opacity)
-                        }
-                    }
-                    .animation(.easeInOut(duration: 0.35), value: showBars)
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    ArtworkView(image: info.artwork, size: h - 12, corner: 5)
+                        .frame(width: left)
+                    Color.clear.frame(width: g.notchSize.width)
+                    SourceLogo(source: player.source, size: min(20, h - 14))
+                        .frame(width: right)
                 }
-                .frame(width: right)
+                .frame(height: h)
+                if vm.showsLyricStrip {
+                    LyricStripView(lyrics: lyrics)
+                        .padding(.horizontal, 10)
+                        .frame(height: NotchViewModel.lyricStripHeight - 4, alignment: .top)
+                        .transition(.opacity)
+                }
             }
             .padding(.horizontal, vm.topRadius)
-            .frame(height: h)
         }
     }
 }
@@ -311,6 +310,7 @@ private struct ProgressRow: View {
 struct MusicPeekView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var player: NowPlayingService
+    @ObservedObject var lyrics: LyricsService
 
     var body: some View {
         let g = vm.geometry
@@ -324,6 +324,10 @@ struct MusicPeekView: View {
             .padding(.horizontal, 4)
             PlayerControlsView(player: player, artSize: 76)
                 .padding(.top, 6)
+            if lyrics.state != .off {
+                LyricsContextView(lyrics: lyrics)
+                    .padding(.top, 10)
+            }
             Spacer(minLength: 0)
         }
         .foregroundStyle(.white)

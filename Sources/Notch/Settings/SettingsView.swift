@@ -49,6 +49,25 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section {
+                Toggle("Show lyrics", isOn: $settings.showLyrics)
+                Toggle("Show lyric line under the notch", isOn: $settings.showLyricStrip)
+                    .disabled(!settings.showLyrics)
+                LabeledContent("Timing offset") {
+                    HStack {
+                        Stepper(value: $settings.lyricsOffset, in: -5...5, step: 0.1) {
+                            Text(String(format: "%+.1fs", settings.lyricsOffset)).monospacedDigit()
+                        }
+                        Button("Reset") { settings.lyricsOffset = 0 }.disabled(settings.lyricsOffset == 0)
+                    }
+                }
+            } header: {
+                Text("Lyrics")
+            } footer: {
+                Text("Synced lyrics from LRCLIB (lrclib.net), cached on this Mac. Positive offset shows lines earlier.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("Display") {
                 LabeledContent("Show for") {
                     HStack {
@@ -105,7 +124,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 640)
+        .frame(width: 460, height: 700)
     }
 
     private var statusColor: Color {
@@ -135,7 +154,7 @@ final class SettingsWindowController {
 
     func show() {
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 640),
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 700),
                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
             w.title = "Notch Settings"
             w.isReleasedWhenClosed = false

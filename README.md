@@ -16,14 +16,23 @@ own database instead of mirroring on-screen banners.
   body (scrollable, selectable), plus **Open app**, **Copy** and **Dismiss** actions.
   It collapses when the mouse leaves or you click elsewhere.
 - **Now Playing** (Spotify, YouTube Music, YouTube): while music plays, the notch stays
-  notch-sized with album art in the left wing and the source logo in the right wing (alternating
-  with level bars while playing). Title and artist, scrolling if too long, are in the hover
+  notch-sized with album art in the left wing and the source logo in the right wing. Title and artist, scrolling if too long, are in the hover
   card, which also drops down by itself for ~3 s whenever the track changes. Notifications take
   priority and then hand the notch back.
   Hover for a card with a progress bar and previous / play-pause / next; the expanded panel
   shows the same player above the notification list. Other players (Apple Music, podcasts,
   random browser video/calls) are **ignored by default**; Settings › "Include other players"
   shows them with a generic music-note icon.
+- **Synced lyrics**: the line being sung appears in a slim strip directly under the compact
+  notch, at the same width. Lines change with a vertical slide, long lines scroll so they finish
+  before the next line starts, and the strip hides during instrumental gaps or when there are no
+  lyrics. Notifications still take priority. The hover card shows the previous, current (bold) and
+  next lines; click a line to jump there. Lyrics come from [LRCLIB](https://lrclib.net) (free, no key)
+  and are cached, misses included, in `~/Library/Application Support/Notch/lyrics`. YouTube-style
+  titles are cleaned before searching ("(Official Video)", "[Lyrics]", "ft. …", "VEVO",
+  "- Topic", "Artist - Song" splitting). Timing uses MediaRemote's position
+  (elapsed + time since its timestamp × rate), resynced on every play, pause or seek, plus an
+  adjustable offset (Settings › Lyrics, ±0.1 s steps).
 - **Menu-bar bell** (no Dock icon): Show Notifications, Send Test Notification, Settings, Quit.
 - **Settings**: per-app mute list, display duration, launch at login, show on external
   displays, test notification, source status, and clear history.
@@ -160,6 +169,9 @@ Sources/
 - Only notifications that Notification Center stores are visible. Apps that turned off
   "Show in Notification Center" may never create a row.
 - The light-up and now-playing states cover menu-bar items next to the notch.
+- Lyrics depend on LRCLIB having the song. Live versions, remixes and obscure uploads are often
+  missing, and some synced files are slightly off (use the offset). Lookups need internet; a network
+  failure isn't cached, so it retries on the next play.
 - Now Playing relies on private MediaRemote behaviour; a future macOS could close the perl route.
   YouTube vs YouTube Music in a browser is a best guess from open tab URLs/titles.
 - Hover detection uses global mouse-move monitoring, which needs no extra permission.

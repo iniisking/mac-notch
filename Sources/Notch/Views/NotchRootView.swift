@@ -5,6 +5,7 @@ struct NotchRootView: View {
     @ObservedObject var store: NotificationStore
     @ObservedObject var settings: SettingsStore
     @ObservedObject var player: NowPlayingService
+    @ObservedObject var lyrics: LyricsService
 
     private var tint: Color {
         guard let n = vm.current else { return .white }
@@ -40,6 +41,7 @@ struct NotchRootView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: vm.state)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.current?.id)
         .animation(.easeInOut(duration: 0.35), value: vm.glowPulse)
+        .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.showsLyricStrip)
     }
 
     @ViewBuilder private var content: some View {
@@ -47,13 +49,13 @@ struct NotchRootView: View {
         case .idle:
             Color.clear
         case .music:
-            CompactMusicView(vm: vm, player: player)
+            CompactMusicView(vm: vm, player: player, lyrics: lyrics)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
                 .contentShape(Rectangle())
                 .onTapGesture { vm.expand() }
         case .musicPeek:
-            MusicPeekView(vm: vm, player: player)
+            MusicPeekView(vm: vm, player: player, lyrics: lyrics)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
         case .compact:

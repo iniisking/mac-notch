@@ -24,6 +24,17 @@ final class SettingsStore: ObservableObject {
     @Published var showOtherPlayers: Bool {
         didSet { defaults.set(showOtherPlayers, forKey: "showOtherPlayers") }
     }
+    @Published var showLyrics: Bool {
+        didSet { defaults.set(showLyrics, forKey: "showLyrics") }
+    }
+    /// Current lyric line in a slim strip under the compact notch.
+    @Published var showLyricStrip: Bool {
+        didSet { defaults.set(showLyricStrip, forKey: "showLyricStrip") }
+    }
+    /// Seconds added to the playback position for lyric timing (positive = lyrics earlier).
+    @Published var lyricsOffset: Double {
+        didSet { defaults.set(lyricsOffset, forKey: "lyricsOffset") }
+    }
     @Published private(set) var launchAtLogin: Bool
     @Published private(set) var launchAtLoginError: String?
 
@@ -34,6 +45,9 @@ final class SettingsStore: ObservableObject {
         showOnExternalDisplays = defaults.bool(forKey: "showOnExternalDisplays")
         nowPlayingEnabled = defaults.object(forKey: "nowPlayingEnabled") as? Bool ?? true
         showOtherPlayers = defaults.bool(forKey: "showOtherPlayers")
+        showLyrics = defaults.object(forKey: "showLyrics") as? Bool ?? true
+        showLyricStrip = defaults.object(forKey: "showLyricStrip") as? Bool ?? true
+        lyricsOffset = defaults.double(forKey: "lyricsOffset")
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

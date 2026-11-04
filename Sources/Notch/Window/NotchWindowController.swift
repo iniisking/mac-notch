@@ -13,11 +13,13 @@ final class NotchWindowController {
     private var monitors: [Any] = []
     private var cancellables = Set<AnyCancellable>()
 
-    init(screen: NSScreen, store: NotificationStore, settings: SettingsStore, player: NowPlayingService) {
+    init(screen: NSScreen, store: NotificationStore, settings: SettingsStore, player: NowPlayingService,
+         lyrics: LyricsService) {
         self.screen = screen
-        viewModel = NotchViewModel(geometry: .detect(for: screen), store: store, settings: settings, player: player)
+        viewModel = NotchViewModel(geometry: .detect(for: screen), store: store, settings: settings, player: player,
+                                   lyrics: lyrics)
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: NotchViewModel.panelSize))
-        let root = NotchRootView(vm: viewModel, store: store, settings: settings, player: player)
+        let root = NotchRootView(vm: viewModel, store: store, settings: settings, player: player, lyrics: lyrics)
         let host = FirstMouseHostingView(rootView: root)
         host.frame = NSRect(origin: .zero, size: NotchViewModel.panelSize)
         host.autoresizingMask = [.width, .height]

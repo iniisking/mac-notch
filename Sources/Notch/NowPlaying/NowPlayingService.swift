@@ -256,6 +256,22 @@ final class NowPlayingService: ObservableObject {
         do { try p.run() } catch { fallback(command, source: wasSource) }
     }
 
+    /// Seeks via MediaRemote (helper `seek`), optimistic locally.
+    func seek(to seconds: Double) {
+        if var i = info {
+            i.elapsed = seconds
+            i.timestamp = Date()
+            info = i
+        }
+        guard let paths = helperPaths else { return }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        p.arguments = [paths.script, paths.lib, "seek", String(format: "%.2f", seconds)]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        try? p.run()
+    }
+
     private func fallback(_ command: MediaCommand, source: MediaSourceKind?) {
         if source == .spotify {
             spotifyScript(command)

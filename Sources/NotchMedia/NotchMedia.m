@@ -11,6 +11,7 @@
 //   notch_media_get     emit one JSON snapshot and exit
 //   notch_media_send    send MRCommand NOTCH_MEDIA_ARG (0 play, 1 pause,
 //                       2 toggle, 4 next, 5 previous) and exit
+//   notch_media_seek    seek to NOTCH_MEDIA_ARG seconds and exit
 
 #import <Foundation/Foundation.h>
 #include <dlfcn.h>
@@ -23,6 +24,7 @@ typedef void (*MRGetClientFn)(dispatch_queue_t, void (^)(id));
 typedef CFStringRef (*MRClientStringFn)(id);
 typedef void (*MRRegisterFn)(dispatch_queue_t);
 typedef Boolean (*MRSendCommandFn)(int, CFDictionaryRef);
+typedef void (*MRSetElapsedFn)(double);
 
 static MRGetInfoFn mrGetInfo;
 static MRGetIsPlayingFn mrGetIsPlaying;
@@ -31,6 +33,7 @@ static MRClientStringFn mrClientBundle;
 static MRClientStringFn mrClientParentBundle;
 static MRRegisterFn mrRegister;
 static MRSendCommandFn mrSendCommand;
+static MRSetElapsedFn mrSetElapsed;
 
 static NSData *lastArtwork;
 static NSString *lastLine;
@@ -46,6 +49,7 @@ static BOOL loadMediaRemote(void) {
     mrClientParentBundle = (MRClientStringFn)dlsym(h, "MRNowPlayingClientGetParentAppBundleIdentifier");
     mrRegister = (MRRegisterFn)dlsym(h, "MRMediaRemoteRegisterForNowPlayingNotifications");
     mrSendCommand = (MRSendCommandFn)dlsym(h, "MRMediaRemoteSendCommand");
+    mrSetElapsed = (MRSetElapsedFn)dlsym(h, "MRMediaRemoteSetElapsedTime");
     return mrGetInfo != NULL && mrSendCommand != NULL;
 }
 
@@ -219,5 +223,17 @@ __attribute__((visibility("default"))) void notch_media_send(void) {
         // Keep the run loop alive briefly so it actually reaches the player.
         CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.6, false);
         exit(ok ? 0 : 1);
+    }
+}
+
+__attribute__((visibility("default"))) void notch_media_seek(void) {
+    @autoreleasepool {
+        if (!loadMediaRemote() || !mrSetElapsed) exit(2);
+        const char *arg = getenv("NOTCH_MEDIA_ARG");
+        double seconds = arg ? atof(arg) : -1;
+        if (seconds < 0) exit(4);
+        mrSetElapsed(seconds);
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.6, false);  // let the XPC message go out
+        exit(0);
     }
 }
