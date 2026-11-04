@@ -5,18 +5,21 @@ It works **while Focus mode silences banners**, because it reads Notification Ce
 own database instead of mirroring on-screen banners.
 
 - **Idle**: invisible, matches the hardware notch exactly.
-- **Light up**: when a notification arrives, the notch widens and shows the app icon and
-  name on the left and a one-line summary on the right, with a soft glow tinted from the
-  app icon. It collapses after a few seconds (adjustable), and further arrivals queue up
-  with a `+N` badge.
+- **Light up**: Dynamic-Island sized, at exactly the notch height with one small wing per
+  side. The app icon sits in the left wing; right of the camera is a short label (never the
+  app name): the sender for Messages/WhatsApp/Telegram/Slack/Mail, the event for Calendar, and
+  otherwise the title or the first words of the body. The right wing grows to fit the label up
+  to ~92 pt and scrolls longer labels. It has a soft glow tinted from the app icon and collapses
+  after a few seconds (adjustable). Further arrivals queue up and shorten the dwell to 2 s.
 - **Hover (peek)**: drops down into a card with the title, subtitle and 2–3 lines of body text.
 - **Click (expanded)**: a larger panel with recent notifications grouped by app and the full
   body (scrollable, selectable), plus **Open app**, **Copy** and **Dismiss** actions.
   It collapses when the mouse leaves or you click elsewhere.
-- **Now Playing** (Spotify, YouTube Music, YouTube): while music plays, the notch shows the
-  album art fixed on the far left, the source logo fixed on the far right, and the title over
-  the artist in between, scrolling as a marquee when too long (on notch screens the text sits
-  beside the camera housing). Notifications take priority and then hand the notch back.
+- **Now Playing** (Spotify, YouTube Music, YouTube): while music plays, the notch stays
+  notch-sized with album art in the left wing and the source logo in the right wing (alternating
+  with level bars while playing). Title and artist, scrolling if too long, are in the hover
+  card, which also drops down by itself for ~3 s whenever the track changes. Notifications take
+  priority and then hand the notch back.
   Hover for a card with a progress bar and previous / play-pause / next; the expanded panel
   shows the same player above the notification list. Other players (Apple Music, podcasts,
   random browser video/calls) are **ignored by default**; Settings › "Include other players"
@@ -77,7 +80,13 @@ Since macOS 15.4 the private MediaRemote framework only answers Apple-entitled p
 Notch therefore runs `/usr/bin/perl` (which is entitled) with `Contents/Resources/notch-media.pl`,
 which loads Notch's own helper library `libNotchMedia.dylib` (`Sources/NotchMedia/`) and streams
 JSON now-playing updates (title, artist, album, artwork, playing state, elapsed/duration, source
-bundle id). Play/pause/next/previous go through the same helper. This is the same technique as the
+bundle id).
+
+Play/pause/next/previous go through the same helper (`send`). Each command is checked: if the
+player's state doesn't change within ~2 s, Notch falls back to Spotify's AppleScript (for Spotify)
+or to the system media keys (play/next/previous). Posting media keys needs **Accessibility**
+permission, and macOS asks the first time that fallback is used. (The original bug was that the helper
+exited before MediaRemote delivered the command; it now waits for delivery.) This is the same technique as the
 open-source [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter) (BSD-3), written
 independently and minimally here; nothing third-party is bundled. Check it any time with:
 
@@ -89,7 +98,8 @@ independently and minimally here; nothing third-party is bundled. Check it any t
 Source detection: Spotify is recognised by bundle id; installed YouTube/YouTube Music web apps by
 their app name. When the player is a **browser** (Chrome, Arc, Edge, Brave, Safari, …) Notch asks
 it for its tab URLs/titles via AppleScript: `music.youtube.com` → YouTube Music, `youtube.com` →
-YouTube. **macOS shows a one-time prompt "Notch wants to control <Browser>"** the first time this
+YouTube. Until the browser answers, a metadata guess is shown (an album means YouTube Music, a
+channel/artist means YouTube). **macOS shows a one-time prompt "Notch wants to control <Browser>"** the first time this
 happens for each browser; if you click Don't Allow, browser playback is treated as "other" (hidden
 by default). Re-enable in System Settings › Privacy & Security › Automation › Notch.
 If the MediaRemote helper ever stops working, Notch falls back to Spotify's AppleScript
@@ -100,7 +110,12 @@ dictionary (this triggers a one-time "control Spotify" prompt).
 - Menu bar › **Send Test Notification** (⌘T while the menu is open), or the same button in Settings.
 - Launch flags: `open build/Notch.app --args --demo` injects three test notifications;
   `--expand` opens the expanded panel; `--peek` pins the hover card open (for screenshots only);
-  `--demo-music[=spotify|youtubemusic|youtube]` shows a fake track (stops the real helper).
+  `--demo-music[=spotify|youtubemusic|youtube]` shows a fake track (stops the real helper);
+  `--media-selftest` sends play/pause, pause, next, previous and pause to whatever is playing and
+  logs the results to `~/Library/Application Support/Notch/debug.log`.
+- If you launch Notch from a terminal or another tool, macOS attributes its Automation prompt to
+  that parent app (e.g. "Terminal wants to control Google Chrome"). Launch it from Finder,
+  Spotlight or login items so the prompt names Notch.
 
 ## How it works
 

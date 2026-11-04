@@ -20,14 +20,17 @@ final class NotchViewModel: ObservableObject {
     var openSettings: () -> Void = {}
     var openFullDiskAccess: () -> Void = {}
 
-    static let wing: CGFloat = 150
-    static let musicWing: CGFloat = 170
+    /// Compact labels wider than this scroll.
+    static let maxLabelWing: CGFloat = 92
     /// Size of the panel that hosts the shape; big enough for the expanded state plus glow.
     static let panelSize = CGSize(width: 720, height: 470)
 
     private var queue: [NotchNotification] = []
     private var compactWork: DispatchWorkItem?
     private var hoverWork: DispatchWorkItem?
+    private var autoPeekWork: DispatchWorkItem?
+    /// True while the music card is showing because the track changed (not because of hover).
+    private(set) var isAutoPeek = false
     private(set) var isHovering = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -43,6 +46,17 @@ final class NotchViewModel: ObservableObject {
             .sink { [weak self] _ in
                 guard let self else { return }
                 if self.state == .idle || self.state == .music { self.state = self.restingState }
+            }
+            .store(in: &cancellables)
+        // Track changes: briefly drop down so you can see what's playing.
+        player.$info
+            .map { $0?.trackKey }
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] key in
+                guard key != nil else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { self?.autoPeekIfResting() }
             }
             .store(in: &cancellables)
         store.arrivals
@@ -71,17 +85,43 @@ final class NotchViewModel: ObservableObject {
         }
     }
 
+    /// Dynamic-Island style wing: about as wide as the notch is tall.
+    var wing: CGFloat { geometry.notchSize.height + 6 }
+
+    /// Right wing in the compact notification state: as wide as the label needs, capped.
+    var labelWing: CGFloat {
+        guard let n = current else { return wing }
+        let text = (n.shortLabel as NSString).size(withAttributes: [.font: Self.labelFont]).width
+        return min(Self.maxLabelWing, max(wing, ceil(text) + 12))
+    }
+
+    static let labelFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+
+    /// (left wing, right wing) for the compact states.
+    var wings: (CGFloat, CGFloat) {
+        switch state {
+        case .compact: return (wing, labelWing)
+        default: return (wing, wing)
+        }
+    }
+
     var shapeSize: CGSize {
         let w = geometry.notchSize.width, h = geometry.notchSize.height
-        let compactWidth = w + 2 * topRadius + 2 * Self.wing
         switch state {
         case .idle: return CGSize(width: w + 2 * topRadius, height: h)
-        case .compact: return CGSize(width: compactWidth, height: h)
-        case .music: return CGSize(width: w + 2 * topRadius + 2 * Self.musicWing, height: h)
-        case .peek: return CGSize(width: max(compactWidth, 470), height: h + 112)
-        case .musicPeek: return CGSize(width: max(w + 2 * topRadius + 2 * Self.musicWing, 480), height: h + 118)
+        case .compact, .music:
+            let (l, r) = wings
+            return CGSize(width: w + 2 * topRadius + l + r, height: h)
+        case .peek: return CGSize(width: max(w + 2 * topRadius + 2 * 150, 470), height: h + 112)
+        case .musicPeek: return CGSize(width: 480, height: h + 118)
         case .expanded: return CGSize(width: 660, height: 430)
         }
+    }
+
+    /// Horizontal shift that keeps the camera gap over the hardware notch when wings differ.
+    var shapeOffsetX: CGFloat {
+        let (l, r) = wings
+        return (r - l) / 2
     }
 
     /// The idle shape is drawn invisibly so it can grow out of the hardware notch.
@@ -102,14 +142,41 @@ final class NotchViewModel: ObservableObject {
     private func enqueue(_ n: NotchNotification) {
         queue.append(n)
         pendingCount = queue.count
-        if state == .idle || state == .music { showNext() }
+        if state == .idle || state == .music || (state == .musicPeek && isAutoPeek) {
+            showNext()
+        } else if state == .compact {
+            // Others are waiting now: don't hold the current one for the full duration.
+            scheduleAdvance(after: min(settings.displayDuration, 2.0))
+        }
     }
 
     /// What the notch shows when nothing else is going on.
     var restingState: State { player.showInNotch ? .music : .idle }
 
+    private func autoPeekIfResting(attempt: Int = 0) {
+        // Music may only just be starting (still idle): try again shortly.
+        if state == .idle, attempt < 4 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.autoPeekIfResting(attempt: attempt + 1)
+            }
+            return
+        }
+        guard state == .music, !isHovering else { return }
+        isAutoPeek = true
+        state = .musicPeek
+        autoPeekWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isAutoPeek, !self.isHovering, self.state == .musicPeek else { return }
+            self.isAutoPeek = false
+            self.collapse()
+        }
+        autoPeekWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+    }
+
     private func showNext() {
         compactWork?.cancel()
+        isAutoPeek = false
         guard !queue.isEmpty else {
             state = restingState
             return
@@ -120,6 +187,11 @@ final class NotchViewModel: ObservableObject {
         pulseGlow()
         // Shorter dwell while others are waiting.
         let dwell = queue.isEmpty ? settings.displayDuration : min(settings.displayDuration, 2.0)
+        scheduleAdvance(after: dwell)
+    }
+
+    private func scheduleAdvance(after dwell: TimeInterval) {
+        compactWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.state == .compact else { return }
             self.showNext()
@@ -165,6 +237,8 @@ final class NotchViewModel: ObservableObject {
             state = .peek
         case .music:
             state = .musicPeek
+        case .musicPeek:
+            isAutoPeek = false   // hovering takes over from the auto-peek timer
         case .idle:
             // A paused session can still be controlled from the idle notch.
             if player.hasSession {
@@ -173,7 +247,7 @@ final class NotchViewModel: ObservableObject {
                 current = store.visibleHistory.first
                 state = .peek
             }
-        case .peek, .musicPeek, .expanded:
+        case .peek, .expanded:
             break
         }
     }
@@ -191,6 +265,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     func collapse() {
+        isAutoPeek = false
         if queue.isEmpty { state = restingState } else { showNext() }
     }
 }

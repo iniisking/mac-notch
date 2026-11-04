@@ -214,6 +214,10 @@ __attribute__((visibility("default"))) void notch_media_send(void) {
         const char *arg = getenv("NOTCH_MEDIA_ARG");
         int command = arg ? atoi(arg) : -1;
         if (command < 0 || command > 13) exit(4);
-        exit(mrSendCommand(command, NULL) ? 0 : 1);
+        Boolean ok = mrSendCommand(command, NULL);
+        // The command is delivered asynchronously over XPC: exiting immediately drops it.
+        // Keep the run loop alive briefly so it actually reaches the player.
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.6, false);
+        exit(ok ? 0 : 1);
     }
 }

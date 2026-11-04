@@ -34,6 +34,7 @@ struct NotchRootView: View {
                 .frame(width: size.width, height: size.height, alignment: .top)
                 .clipShape(shape)
         }
+        .offset(x: vm.shapeOffsetX)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: vm.state)

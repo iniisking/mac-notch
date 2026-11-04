@@ -140,6 +140,7 @@ final class NowPlayingService: ObservableObject {
                   let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
             if failures > 0 || usingFallback { failures = 0; stopFallback() }
             status = "Running"
+            updateCounter &+= 1
             handle(obj)
         }
     }
@@ -213,7 +214,16 @@ final class NowPlayingService: ObservableObject {
 
     // MARK: - Commands
 
+    /// Changes whenever the helper reports a real state change (used to verify commands landed).
+    private var updateCounter = 0
+
+    /// Play/pause/next/previous with fallbacks, in order:
+    /// 1. MediaRemote send-command through the perl bridge (works for any player incl. browsers);
+    /// 2. if no state change is observed within ~1.5 s: Spotify's AppleScript for Spotify,
+    /// 3. otherwise a system media-key event (needs Accessibility permission to post events).
     func send(_ command: MediaCommand) {
+        let before = updateCounter
+        let wasSource = source
         // Optimistic UI for play/pause.
         if var i = info, command == .togglePlayPause || command == .play || command == .pause {
             let now = Date()
@@ -223,25 +233,49 @@ final class NowPlayingService: ObservableObject {
             info = i
             updateVisibility()
         }
-        if usingFallback, source == .spotify {
-            let verb: String
-            switch command {
-            case .play: verb = "play"
-            case .pause: verb = "pause"
-            case .togglePlayPause: verb = "playpause"
-            case .next: verb = "next track"
-            case .previous: verb = "previous track"
-            }
-            AppleScriptRunner.run("tell application \"Spotify\" to \(verb)") { [weak self] _ in self?.pollSpotify() }
+        if usingFallback, wasSource == .spotify {
+            spotifyScript(command)
             return
         }
-        guard let paths = helperPaths else { return }
+        guard let paths = helperPaths else { fallback(command, source: wasSource); return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = [paths.script, paths.lib, "send", String(command.rawValue)]
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
-        try? p.run()
+        p.terminationHandler = { [weak self] proc in
+            let ok = proc.terminationStatus == 0
+            DispatchQueue.main.asyncAfter(deadline: .now() + (ok ? 1.8 : 0)) {
+                guard let self else { return }
+                if !ok || self.updateCounter == before {
+                    DebugLog.write("MediaRemote \(command) had no visible effect; falling back (source \(wasSource.map { "\($0)" } ?? "?"))")
+                    self.fallback(command, source: wasSource)
+                }
+            }
+        }
+        do { try p.run() } catch { fallback(command, source: wasSource) }
+    }
+
+    private func fallback(_ command: MediaCommand, source: MediaSourceKind?) {
+        if source == .spotify {
+            spotifyScript(command)
+        } else {
+            MediaKeys.post(command)
+        }
+    }
+
+    private func spotifyScript(_ command: MediaCommand) {
+        let verb: String
+        switch command {
+        case .play: verb = "play"
+        case .pause: verb = "pause"
+        case .togglePlayPause: verb = "playpause"
+        case .next: verb = "next track"
+        case .previous: verb = "previous track"
+        }
+        AppleScriptRunner.run("tell application \"Spotify\" to \(verb)", timeout: 30) { [weak self] _ in
+            self?.pollSpotify()
+        }
     }
 
     // MARK: - Debug

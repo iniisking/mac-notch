@@ -42,8 +42,8 @@ final class NotificationStore: ObservableObject {
     }
 
     /// Injects a fake notification so the UI can be checked without real notifications.
-    func injectTest() {
-        let item = NotchNotification.test()
+    func injectTest(index: Int? = nil) {
+        let item = index.map { NotchNotification.test(index: $0) } ?? NotchNotification.test()
         insert(item)
         arrivals.send(item)
     }

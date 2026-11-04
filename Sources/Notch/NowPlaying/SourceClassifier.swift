@@ -40,10 +40,11 @@ final class SourceClassifier {
         }
         let key = "\(browserID)|\(info.title)"
         if let hit = cache[key] { return hit }
-        guard !inFlight.contains(key) else { return nil }
+        let guess = Self.guess(info, browserID: browserID)
+        guard !inFlight.contains(key) else { return guess }
         // Never `tell` a browser that isn't running (that would launch it).
         guard NSRunningApplication.runningApplications(withBundleIdentifier: browserID).first != nil else {
-            return .other(browserID)
+            return guess
         }
         inFlight.insert(key)
         let isSafari = Self.webkit[browserID] != nil
@@ -64,12 +65,23 @@ final class SourceClassifier {
         AppleScriptRunner.run(script, timeout: 60) { [weak self] output in
             guard let self else { return }
             self.inFlight.remove(key)
-            let kind = Self.decide(tabs: output ?? "", info: info, browserID: browserID)
+            // No answer (Automation denied / prompt unanswered): keep the metadata-based guess.
+            let kind = output == nil ? guess : Self.decide(tabs: output!, info: info, browserID: browserID)
+            DebugLog.write("classify '\(info.title)' via \(appName): \(output == nil ? "AppleScript failed (Automation denied?)" : "\(output!.split(separator: "\n").count) tabs") -> \(kind)")
             // Don't cache failures (e.g. Automation not yet allowed) so we retry next track.
             if output != nil { self.cache[key] = kind }
             update(kind)
         }
-        return nil
+        // Show something right away; the browser's answer refines it.
+        return guess
+    }
+
+    /// Best guess from metadata alone: YouTube Music reports an album; YouTube reports the channel
+    /// as artist and no album; calls / other web media usually report neither.
+    private static func guess(_ info: NowPlayingInfo, browserID: String) -> MediaSourceKind {
+        if !info.album.isEmpty { return .youtubeMusic }
+        if !info.artist.isEmpty { return .youtube }
+        return .other(browserID)
     }
 
     private static func decide(tabs: String, info: NowPlayingInfo, browserID: String) -> MediaSourceKind {

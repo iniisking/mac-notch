@@ -3,15 +3,16 @@ import SwiftUI
 
 // MARK: - Marquee
 
-/// Single-line text that scrolls horizontally (with a pause) only when it doesn't fit.
+/// Single-line text that scrolls only when it doesn't fit: pause at the start, then a smooth
+/// constant-speed scroll with one fixed gap before the copy, looping seamlessly.
 struct MarqueeText: View {
     let text: String
     var font: Font = .system(size: 12, weight: .semibold)
     var color: Color = .white
     var height: CGFloat = 16
-    var speed: CGFloat = 30        // points per second
-    var gap: CGFloat = 36
-    var pause: Double = 1.6
+    var speed: CGFloat = 28        // points per second
+    var gap: CGFloat = 28
+    var pause: Double = 1.5
 
     @State private var textWidth: CGFloat = 0
     @State private var start = Date()
@@ -19,42 +20,46 @@ struct MarqueeText: View {
     var body: some View {
         GeometryReader { geo in
             let available = geo.size.width
-            Group {
-                if textWidth <= available + 0.5 {
-                    label
-                } else {
-                    TimelineView(.animation) { ctx in
-                        let travel = textWidth + gap
-                        let cycle = Double(travel / speed) + pause
-                        let t = ctx.date.timeIntervalSince(start).truncatingRemainder(dividingBy: cycle)
-                        let x = t < pause ? 0 : -CGFloat(t - pause) * speed
-                        HStack(spacing: gap) { label; label }
-                            .offset(x: x)
+            if textWidth <= available + 0.5 {
+                label.frame(width: available, height: height, alignment: .leading)
+            } else {
+                TimelineView(.animation) { ctx in
+                    let travel = textWidth + gap
+                    let scroll = Double(travel / speed)
+                    let t = ctx.date.timeIntervalSince(start).truncatingRemainder(dividingBy: pause + scroll)
+                    let x = t < pause ? 0 : -(CGFloat(t - pause) * speed).rounded(.toNearestOrEven)
+                    // Two copies, each laid out at its own natural width; nothing is compressed.
+                    ZStack(alignment: .leading) {
+                        label.offset(x: x)
+                        label.offset(x: x + travel)
                     }
-                    .mask(
-                        LinearGradient(stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.06),
-                            .init(color: .black, location: 0.92),
-                            .init(color: .clear, location: 1),
-                        ], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: available, height: height, alignment: .leading)
+                    .clipped()
+                    .mask(fadeMask(moving: t >= pause))
                 }
             }
-            .frame(width: available, height: height, alignment: .leading)
-            .clipped()
         }
         .frame(height: height)
-        .background(
+        .background(alignment: .leading) {
             label.hidden().background(GeometryReader { g in
                 Color.clear.preference(key: WidthKey.self, value: g.size.width)
-            }),
-            alignment: .leading)
+            })
+        }
         .onPreferenceChange(WidthKey.self) { textWidth = $0 }
         .onChange(of: text) { _, _ in start = Date() }
     }
 
     private var label: some View {
-        Text(text).font(font).foregroundStyle(color).lineLimit(1).fixedSize()
+        Text(text).font(font).foregroundStyle(color).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func fadeMask(moving: Bool) -> some View {
+        LinearGradient(stops: [
+            .init(color: moving ? .clear : .black, location: 0),
+            .init(color: .black, location: 0.08),
+            .init(color: .black, location: 0.9),
+            .init(color: .clear, location: 1),
+        ], startPoint: .leading, endPoint: .trailing)
     }
 
     private struct WidthKey: PreferenceKey {
@@ -198,8 +203,8 @@ struct PlayingBars: View {
 
 // MARK: - Compact (closed notch) player
 
-/// Art fixed far left, source logo fixed far right; only the middle text scrolls.
-/// On notch screens the text sits beside the camera housing, between art and notch.
+/// Dynamic-Island sized: album art in the left wing, source logo in the right wing
+/// (alternating with level bars while playing). Title/artist live in the hover card.
 struct CompactMusicView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var player: NowPlayingService
@@ -207,32 +212,24 @@ struct CompactMusicView: View {
     var body: some View {
         let g = vm.geometry
         let h = g.notchSize.height
+        let (left, right) = vm.wings
         if let info = player.info {
-            let art = h - 10
             HStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    ArtworkView(image: info.artwork, size: art, corner: 5)
-                    VStack(alignment: .leading, spacing: 0) {
-                        MarqueeText(text: info.title, font: .system(size: 11, weight: .semibold), height: 14)
-                        if !info.artist.isEmpty {
-                            MarqueeText(text: info.artist, font: .system(size: 10),
-                                        color: .white.opacity(0.6), height: 13)
+                ArtworkView(image: info.artwork, size: h - 12, corner: 5)
+                    .frame(width: left)
+                Color.clear.frame(width: g.notchSize.width)
+                TimelineView(.periodic(from: .now, by: 4)) { ctx in
+                    let showBars = info.isPlaying && Int(ctx.date.timeIntervalSinceReferenceDate / 4) % 2 == 1
+                    ZStack {
+                        if showBars {
+                            PlayingBars(playing: true, color: .white.opacity(0.85)).transition(.opacity)
+                        } else {
+                            SourceLogo(source: player.source, size: min(20, h - 14)).transition(.opacity)
                         }
                     }
+                    .animation(.easeInOut(duration: 0.35), value: showBars)
                 }
-                .padding(.leading, 6)
-                .padding(.trailing, g.hasNotch ? 10 : 4)
-                .frame(width: NotchViewModel.musicWing + (g.hasNotch ? 0 : 70), alignment: .leading)
-
-                Color.clear.frame(width: g.notchSize.width)
-
-                HStack(spacing: 10) {
-                    Spacer(minLength: 0)
-                    PlayingBars(playing: info.isPlaying, color: .white.opacity(0.75))
-                    SourceLogo(source: player.source, size: min(20, h - 12))
-                }
-                .padding(.trailing, 8)
-                .frame(width: NotchViewModel.musicWing - (g.hasNotch ? 0 : 70))
+                .frame(width: right)
             }
             .padding(.horizontal, vm.topRadius)
             .frame(height: h)

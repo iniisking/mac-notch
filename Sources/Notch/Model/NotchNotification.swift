@@ -13,9 +13,29 @@ struct NotchNotification: Identifiable, Hashable, Codable {
 
     /// One-line text for the compact state: sender/title, falling back to the body.
     var summary: String {
-        if !title.isEmpty { return title }
-        if !subtitle.isEmpty { return subtitle }
-        return body.replacingOccurrences(of: "\n", with: " ")
+        let t = Self.clean(title)
+        if !t.isEmpty { return t }
+        if !subtitle.isEmpty { return Self.clean(subtitle) }
+        return Self.clean(body).replacingOccurrences(of: "\n", with: " ")
+    }
+
+    /// Short compact label: the sender (Messages/WhatsApp/Telegram/Slack…: `titl`), the event (Calendar:
+    /// `titl`), the sender (Mail: `titl`, subject is `subt`); otherwise the title, or the first words of
+    /// the body. Never the app name. Bidi/zero-width marks (WhatsApp prefixes U+200E) are stripped.
+    var shortLabel: String {
+        let t = Self.clean(title)
+        if !t.isEmpty { return t }
+        let words = Self.clean(body).split(whereSeparator: { $0.isWhitespace }).prefix(4)
+        if !words.isEmpty { return words.joined(separator: " ") }
+        return Self.clean(subtitle)
+    }
+
+    static func clean(_ s: String) -> String {
+        let invisible: Set<Unicode.Scalar> = ["\u{200B}", "\u{200C}", "\u{200D}", "\u{200E}", "\u{200F}",
+                                              "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",
+                                              "\u{2066}", "\u{2067}", "\u{2068}", "\u{2069}", "\u{FEFF}"]
+        let scalars = s.unicodeScalars.filter { !invisible.contains($0) }
+        return String(String.UnicodeScalarView(scalars)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Everything as plain text, for "Copy".

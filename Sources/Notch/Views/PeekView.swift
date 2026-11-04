@@ -14,10 +14,6 @@ struct PeekView: View {
                 HStack(spacing: 7) {
                     if let n = vm.current {
                         AppIconView(bundleID: n.bundleID, size: min(20, g.notchSize.height - 8))
-                        Text(AppInfoProvider.shared.info(for: n.bundleID).name)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.7))
-                            .lineLimit(1)
                     } else {
                         Image(systemName: "bell").foregroundStyle(.white.opacity(0.6))
                     }
@@ -43,7 +39,7 @@ struct PeekView: View {
                 } else if let n = vm.current {
                     VStack(alignment: .leading, spacing: 3) {
                         if !n.title.isEmpty {
-                            Text(n.title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                            Text(NotchNotification.clean(n.title)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                         }
                         if !n.subtitle.isEmpty {
                             Text(n.subtitle).font(.system(size: 12, weight: .medium))

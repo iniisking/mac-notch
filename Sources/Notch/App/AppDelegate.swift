@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if args.contains("--demo") {
             for i in 0..<3 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 + Double(i) * 0.3) { [weak self] in
-                    self?.store.injectTest()
+                    self?.store.injectTest(index: i)
                 }
             }
         }
@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let kind = demo.split(separator: "=").dropFirst().first.map(String.init) ?? "spotify"
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.player.debugDemo(kind) }
         }
+        if args.contains("--media-selftest") { runMediaSelfTest() }
         if args.contains("--peek") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 guard let vm = self?.controllers.values.first?.viewModel else { return }
@@ -76,6 +77,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         source.stop()
+    }
+
+    /// Debug: drives the real command path (play/pause, next, previous) and logs whether the
+    /// player's state actually changed each time. Leaves playback paused at the end.
+    private func runMediaSelfTest() {
+        let steps: [(MediaCommand, Double)] = [(.togglePlayPause, 4), (.togglePlayPause, 4), (.next, 5), (.previous, 5), (.pause, 3)]
+        func describe() -> String {
+            guard let i = player.info else { return "nothing playing" }
+            return "\(i.isPlaying ? "playing" : "paused") '\(i.title)' source=\(player.source.map { "\($0)" } ?? "?")"
+        }
+        var delay = 3.0
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { DebugLog.write("selftest start: \(describe())") }
+        for (cmd, wait) in steps {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                DebugLog.write("selftest send \(cmd) (before: \(describe()))")
+                self?.player.send(cmd)
+            }
+            delay += wait
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay - 0.1) { DebugLog.write("selftest after \(cmd): \(describe())") }
+        }
     }
 
     // MARK: - Windows per screen

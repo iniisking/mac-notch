@@ -1,43 +1,23 @@
 import SwiftUI
 
-/// "Light up" state: icon + app name in the left wing, one-line summary in the right wing.
+/// "Light up" state, Dynamic-Island sized: app icon in the small left wing, the sender / event
+/// label right of the camera (marquee if it's longer than the capped right wing). No app name.
 struct CompactView: View {
     @ObservedObject var vm: NotchViewModel
 
     var body: some View {
         let g = vm.geometry
         let h = g.notchSize.height
+        let (left, right) = vm.wings
         if let n = vm.current {
             HStack(spacing: 0) {
-                HStack(spacing: 7) {
-                    AppIconView(bundleID: n.bundleID, size: min(22, h - 8))
-                    Text(AppInfoProvider.shared.info(for: n.bundleID).name)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.65))
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
-                }
-                .padding(.leading, 12)
-                .frame(width: NotchViewModel.wing)
-
+                AppIconView(bundleID: n.bundleID, size: min(22, h - 12))
+                    .frame(width: left)
                 Color.clear.frame(width: g.notchSize.width)
-
-                HStack(spacing: 6) {
-                    Spacer(minLength: 0)
-                    Text(n.summary)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if vm.pendingCount > 0 {
-                        Text("+\(vm.pendingCount)")
-                            .font(.system(size: 9, weight: .bold))
-                            .padding(.horizontal, 5).padding(.vertical, 2)
-                            .background(Capsule().fill(.white.opacity(0.2)))
-                    }
-                }
-                .padding(.trailing, 12)
-                .frame(width: NotchViewModel.wing)
+                MarqueeText(text: n.shortLabel, font: Font(NotchViewModel.labelFont), height: 16)
+                    .padding(.leading, 4)
+                    .padding(.trailing, 8)
+                .frame(width: right, height: h)
             }
             .padding(.horizontal, vm.topRadius)
             .frame(height: h)

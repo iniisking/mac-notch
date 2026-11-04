@@ -63,7 +63,8 @@ final class NotchWindowController {
     private var hitRect: NSRect {
         let s = viewModel.hitSize
         let f = panel.frame
-        return NSRect(x: f.midX - s.width / 2, y: f.maxY - s.height, width: s.width, height: s.height)
+        let dx = viewModel.state == .idle ? 0 : viewModel.shapeOffsetX
+        return NSRect(x: f.midX + dx - s.width / 2, y: f.maxY - s.height, width: s.width, height: s.height)
     }
 
     private func installMonitors() {
