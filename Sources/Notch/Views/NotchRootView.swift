@@ -7,27 +7,12 @@ struct NotchRootView: View {
     @ObservedObject var player: NowPlayingService
     @ObservedObject var lyrics: LyricsService
 
-    private var tint: Color {
-        guard let n = vm.current else { return .white }
-        return Color(nsColor: AppInfoProvider.shared.info(for: n.bundleID).tint)
-    }
-
-    private var glowOpacity: Double {
-        switch vm.state {
-        case .compact: return vm.glowPulse ? 0.95 : 0.5
-        case .peek: return 0.25
-        default: return 0
-        }
-    }
-
     var body: some View {
         let size = vm.shapeSize
         let shape = NotchShape(topRadius: vm.topRadius, bottomRadius: vm.bottomRadius)
         ZStack(alignment: .top) {
             shape
                 .fill(Color.black)
-                .shadow(color: tint.opacity(glowOpacity), radius: vm.glowPulse ? 14 : 9)
-                .overlay(shape.stroke(tint.opacity(vm.state == .compact ? 0.35 : 0), lineWidth: 1))
                 .frame(width: size.width, height: size.height)
                 .opacity(vm.shapeOpacity)
 
@@ -40,7 +25,6 @@ struct NotchRootView: View {
         .environment(\.colorScheme, .dark)
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: vm.state)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.current?.id)
-        .animation(.easeInOut(duration: 0.35), value: vm.glowPulse)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.showsLyricStrip)
     }
 

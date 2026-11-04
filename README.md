@@ -9,7 +9,7 @@ own database instead of mirroring on-screen banners.
   side. The app icon sits in the left wing; right of the camera is a short label (never the
   app name): the sender for Messages/WhatsApp/Telegram/Slack/Mail, the event for Calendar, and
   otherwise the title or the first words of the body. The right wing grows to fit the label up
-  to ~92 pt and scrolls longer labels. It has a soft glow tinted from the app icon and collapses
+  to ~92 pt and scrolls longer labels. It is plain black, with no glow or outline, and collapses
   after a few seconds (adjustable). Further arrivals queue up and shorten the dwell to 2 s.
 - **Hover (peek)**: drops down into a card with the title, subtitle and 2–3 lines of body text.
 - **Click (expanded)**: a larger panel with recent notifications grouped by app and the full
@@ -134,7 +134,7 @@ Sources/
   Notch/
     App/                          main.swift, AppDelegate (status item, per-screen windows, onboarding)
     Source/                       NotificationSource protocol, DBNotificationSource
-    Model/                        NotchNotification, NotificationStore (history), AppInfoProvider (icons/tint)
+    Model/                        NotchNotification, NotificationStore (history), AppInfoProvider (names/icons)
     Window/                       NotchPanel (NSPanel), NotchWindowController (placement + mouse hit-testing), NotchGeometry
     ViewModel/NotchViewModel      idle / compact / peek / expanded state machine, queue, timers
     Views/                        NotchShape, NotchRootView, CompactView, PeekView, ExpandedView

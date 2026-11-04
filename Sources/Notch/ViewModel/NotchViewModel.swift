@@ -10,7 +10,6 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var state: State = .idle
     @Published private(set) var current: NotchNotification?
     @Published private(set) var pendingCount = 0
-    @Published private(set) var glowPulse = false
     @Published var selectedID: NotchNotification.ID?
     @Published var geometry: NotchGeometry
 
@@ -23,7 +22,7 @@ final class NotchViewModel: ObservableObject {
 
     /// Compact labels wider than this scroll.
     static let maxLabelWing: CGFloat = 92
-    /// Size of the panel that hosts the shape; big enough for the expanded state plus glow.
+    /// Size of the panel that hosts the shape; big enough for the expanded state.
     static let panelSize = CGSize(width: 720, height: 470)
 
     private var queue: [NotchNotification] = []
@@ -198,7 +197,6 @@ final class NotchViewModel: ObservableObject {
         current = queue.removeFirst()
         pendingCount = queue.count
         state = .compact
-        pulseGlow()
         // Shorter dwell while others are waiting.
         let dwell = queue.isEmpty ? settings.displayDuration : min(settings.displayDuration, 2.0)
         scheduleAdvance(after: dwell)
@@ -212,11 +210,6 @@ final class NotchViewModel: ObservableObject {
         }
         compactWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + dwell, execute: work)
-    }
-
-    private func pulseGlow() {
-        glowPulse = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in self?.glowPulse = false }
     }
 
     // MARK: - Interaction
