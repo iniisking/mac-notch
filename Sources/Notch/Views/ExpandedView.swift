@@ -137,6 +137,7 @@ struct ExpandedView: View {
         .padding(.horizontal, 8).padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 7).fill(.white.opacity(isSelected ? 0.14 : 0)))
         .contentShape(Rectangle())
+        .onTapGesture(count: 2) { vm.open(n) }
         .onTapGesture { vm.selectedID = n.id }
     }
 
@@ -177,13 +178,15 @@ struct ExpandedView: View {
                 .frame(maxHeight: .infinity)
 
                 HStack(spacing: 8) {
+                    let exact = NotificationOpener.deepLink(for: n) != nil
                     Button {
-                        open(info.url)
+                        vm.open(n)
                     } label: {
-                        Label("Open \(info.name)", systemImage: "arrow.up.forward.app")
+                        Label(exact ? "Open conversation" : "Open \(info.name)",
+                              systemImage: exact ? "bubble.left.and.text.bubble.right" : "arrow.up.forward.app")
                     }
                     .buttonStyle(PillButtonStyle(prominent: true))
-                    .disabled(info.url == nil)
+                    .disabled(info.url == nil && !exact)
 
                     Button {
                         NSPasteboard.general.clearContents()
@@ -215,12 +218,6 @@ struct ExpandedView: View {
         guard let i = all.firstIndex(where: { $0.id == n.id }) else { return nil }
         if i + 1 < all.count { return all[i + 1].id }
         return i > 0 ? all[i - 1].id : nil
-    }
-
-    private func open(_ url: URL?) {
-        guard let url else { return }
-        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
-        vm.collapse()
     }
 
     private func iconButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {

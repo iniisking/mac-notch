@@ -72,7 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // the same actions as Settings › Test notifications (for scripted checks).
         if let arg = args.first(where: { $0.hasPrefix("--test-preset=") }) {
             let name = String(arg.dropFirst("--test-preset=".count))
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            let delay = args.first(where: { $0.hasPrefix("--test-delay=") })
+                .flatMap { Double($0.dropFirst("--test-delay=".count)) } ?? 1.0
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 guard let self else { return }
                 if name == "burst" {
                     for (i, p) in [TestPreset.whatsapp, .mail, .calendar].enumerated() {
@@ -81,6 +83,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 } else if let p = TestPreset(rawValue: name) {
                     self.store.injectTest(p.make())
                 }
+            }
+        }
+        // `--dump-records`: write the decoded plist structure of recent chat/mail rows to
+        // ~/Library/Application Support/Notch/record-dump.txt (local only, for deep-link research).
+        if args.contains("--dump-records") {
+            DispatchQueue.global().async { RecordDumper.dump() }
+        }
+        // `--open-latest=<bundle id>`: run the double-click opener on the newest real notification
+        // from that app (after the DB history has loaded). Logs what it chose to debug.log.
+        if let arg = args.first(where: { $0.hasPrefix("--open-latest=") }) {
+            let bundle = String(arg.dropFirst("--open-latest=".count)).lowercased()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                guard let self else { return }
+                guard let n = self.store.history.first(where: { $0.bundleID.lowercased() == bundle && !$0.isTest && ($0.chatJID != nil || $0.defaultURL != nil) }) else {
+                    DebugLog.write("open-latest: no \(bundle) notification in history"); return
+                }
+                DebugLog.write("open-latest: \(bundle) rec=\(n.recID ?? -1) durl=\(n.defaultURL != nil) jid=\(n.chatJID?.split(separator: "@").last ?? "-") phone=\(n.senderPhone != nil)")
+                NotificationOpener.open(n)
             }
         }
         if args.contains("--test-system") {

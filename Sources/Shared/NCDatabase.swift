@@ -18,6 +18,12 @@ struct NCPayload {
     var body: String = ""
     var threadID: String?
     var date: Date?
+    /// The app's own default-action URL, when it provides one (Messages: `durl`).
+    var defaultURL: String?
+    /// WhatsApp chat id from userInfo (`jid`), e.g. "…@lid", "…@s.whatsapp.net", "…@g.us".
+    var chatJID: String?
+    /// Sender's phone handle from the communication context, e.g. "+2348012345678".
+    var senderPhone: String?
 
     var isEmpty: Bool { title.isEmpty && subtitle.isEmpty && body.isEmpty }
 
@@ -35,8 +41,37 @@ struct NCPayload {
             p.body = string(req["body"])
             let thread = string(req["thre"])
             p.threadID = thread.isEmpty ? nil : thread
+            let durl = string(req["durl"])
+            p.defaultURL = durl.isEmpty ? nil : durl
+            if let usda = req["usda"] as? Data, let info = unarchive(usda) as? [String: Any] {
+                let jid = string(info["jid"])
+                p.chatJID = jid.isEmpty ? nil : jid
+            }
+            if let uncc = req["uncc"] as? Data {
+                p.senderPhone = phoneHandle(inArchive: uncc)
+            }
         }
         return p
+    }
+
+    private static func unarchive(_ data: Data) -> Any? {
+        try? NSKeyedUnarchiver.unarchivedObject(
+            ofClasses: [NSDictionary.self, NSArray.self, NSString.self, NSNumber.self, NSDate.self, NSData.self, NSURL.self],
+            from: data)
+    }
+
+    /// The communication context (`uncc`) is a keyed archive of a private class, so read its raw
+    /// object table and take the first phone-number-looking string (the sender's handle).
+    private static func phoneHandle(inArchive data: Data) -> String? {
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+              let objects = plist["$objects"] as? [Any] else { return nil }
+        for case let s as String in objects {
+            let digits = s.filter(\.isNumber)
+            if s.range(of: #"^\+?[0-9 ()-]{7,20}$"#, options: .regularExpression) != nil, (7...15).contains(digits.count) {
+                return s
+            }
+        }
+        return nil
     }
 
     private static func string(_ any: Any?) -> String {

@@ -189,7 +189,8 @@ final class DBNotificationSource: NotificationSource {
             id: row.uuid.map { "nc-\($0)" } ?? "nc-rec-\(row.recID)",
             recID: row.recID, bundleID: bundle,
             title: p.title, subtitle: p.subtitle, body: p.body, threadID: p.threadID,
-            date: row.deliveredDate ?? p.date ?? Date())
+            date: row.deliveredDate ?? p.date ?? Date(),
+            defaultURL: p.defaultURL, chatJID: p.chatJID, senderPhone: p.senderPhone)
     }
 
     private func emit(_ event: NotificationSourceEvent) {

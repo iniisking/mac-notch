@@ -27,6 +27,8 @@ struct NotchRootView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: vm.state)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.current?.id)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.showsLyricStrip)
+        .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.peekHighlight?.id)
+        .animation(.spring(response: 0.38, dampingFraction: 0.85), value: store.visibleHistory.count)
     }
 
     @ViewBuilder private var content: some View {
@@ -40,7 +42,7 @@ struct NotchRootView: View {
                 .contentShape(Rectangle())
                 .onTapGesture { vm.expand() }
         case .musicPeek:
-            MusicPeekView(vm: vm, player: player, lyrics: lyrics)
+            MusicPeekView(vm: vm, player: player, lyrics: lyrics, store: store)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
         case .compact:
@@ -48,12 +50,14 @@ struct NotchRootView: View {
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
                 .contentShape(Rectangle())
+                .onTapGesture(count: 2) { if let n = vm.current { vm.open(n) } }
                 .onTapGesture { vm.expand() }
         case .peek:
             PeekView(vm: vm, store: store)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
                 .contentShape(Rectangle())
+                .onTapGesture(count: 2) { if let n = vm.current { vm.open(n) } }
                 .onTapGesture { vm.expand() }
         case .expanded:
             ExpandedView(vm: vm, store: store, settings: settings, player: player)

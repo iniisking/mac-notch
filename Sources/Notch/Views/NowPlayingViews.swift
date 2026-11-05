@@ -314,32 +314,163 @@ private struct ProgressRow: View {
     }
 }
 
-/// Hover card for the music state.
+/// Hover panel while media is playing: a pinned recent notification (if any), a compact player,
+/// lyrics (only when synced lyrics exist) and the recent notifications list. Notifications are
+/// never hidden behind the player.
 struct MusicPeekView: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var player: NowPlayingService
     @ObservedObject var lyrics: LyricsService
+    @ObservedObject var store: NotificationStore
 
     var body: some View {
         let g = vm.geometry
-        VStack(spacing: 0) {
-            HStack {
+        let side = (vm.shapeSize.width - vm.gapWidth) / 2 - vm.topRadius - 16
+        VStack(alignment: .leading, spacing: 0) {
+            // Top band beside the camera housing.
+            HStack(spacing: 0) {
                 Text("Now Playing").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white.opacity(0.6))
-                Spacer()
+                    .frame(width: side, alignment: .leading)
+                Spacer(minLength: 0)
                 Text(player.source?.displayName ?? "").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+                    .frame(width: side, alignment: .trailing)
             }
             .frame(height: g.notchSize.height)
-            .padding(.horizontal, 4)
-            PlayerControlsView(player: player, artSize: 76)
-                .padding(.top, 6)
-            if lyrics.state != .off {
+
+            if let n = vm.peekHighlight {
+                PinnedNotificationCard(notification: n)
+                    .onTapGesture(count: 2) { vm.open(n) }
+                    .onTapGesture { vm.expand(selecting: n.id) }
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            CompactPlayerRow(player: player)
+                .padding(.top, 4)
+
+            if case .synced = lyrics.state, vm.settings.showLyrics {
                 LyricsContextView(lyrics: lyrics)
-                    .padding(.top, 10)
+                    .padding(.top, 8)
+            }
+
+            // Notifications are always listed under the player.
+            HStack {
+                Text("Notifications").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white.opacity(0.6))
+                Spacer()
+                if !store.visibleHistory.isEmpty {
+                    Text("\(store.visibleHistory.count)").font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
+                }
+            }
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+
+            if store.visibleHistory.isEmpty {
+                Text("No notifications").font(.system(size: 11)).foregroundStyle(.white.opacity(0.4))
+                    .frame(height: 22)
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(store.visibleHistory) { n in
+                            NotificationListRow(notification: n)
+                                .frame(height: NotchViewModel.peekRowHeight)
+                                .contentShape(Rectangle())
+                                .onTapGesture(count: 2) { vm.open(n) }
+                                .onTapGesture { vm.expand(selecting: n.id) }
+                        }
+                    }
+                }
+                .frame(height: CGFloat(min(store.visibleHistory.count, NotchViewModel.peekListLimit)) * NotchViewModel.peekRowHeight)
             }
             Spacer(minLength: 0)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, vm.topRadius + 16)
         .padding(.bottom, 10)
+        .animation(.easeInOut(duration: 0.25), value: vm.peekHighlight?.id)
+    }
+}
+
+/// Art + title/artist + small controls on one row, progress underneath.
+struct CompactPlayerRow: View {
+    @ObservedObject var player: NowPlayingService
+
+    var body: some View {
+        if let info = player.info {
+            HStack(alignment: .center, spacing: 10) {
+                ArtworkView(image: info.artwork, size: 44, corner: 7)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            MarqueeText(text: info.title, font: .system(size: 12.5, weight: .semibold), height: 16)
+                            MarqueeText(text: info.artist.isEmpty ? (player.source?.displayName ?? "") : info.artist,
+                                        font: .system(size: 11), color: .white.opacity(0.6), height: 14)
+                        }
+                        HStack(spacing: 2) {
+                            smallButton("backward.fill", 11) { player.send(.previous) }
+                            smallButton(info.isPlaying ? "pause.fill" : "play.fill", 15) { player.send(.togglePlayPause) }
+                            smallButton("forward.fill", 11) { player.send(.next) }
+                        }
+                    }
+                    ProgressRow(info: info)
+                }
+            }
+            .frame(height: 56)
+        }
+    }
+
+    private func smallButton(_ symbol: String, _ size: CGFloat, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size, weight: .semibold))
+                .frame(width: 26, height: 24).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+    }
+}
+
+/// One notification in a list: icon, "Sender - preview", relative time.
+struct NotificationListRow: View {
+    let notification: NotchNotification
+
+    var body: some View {
+        HStack(spacing: 8) {
+            AppIconView(bundleID: notification.bundleID, size: 18)
+            CompactView.styled(notification.stripParts)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 4)
+            Text(notification.date.notchRelative).font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
+        }
+        .padding(.horizontal, 6)
+    }
+}
+
+/// The just-arrived notification, pinned above the player.
+struct PinnedNotificationCard: View {
+    let notification: NotchNotification
+
+    var body: some View {
+        let parts = notification.stripParts
+        HStack(alignment: .top, spacing: 10) {
+            AppIconView(bundleID: notification.bundleID, size: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(parts.primary).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(notification.date.notchRelative).font(.system(size: 10)).foregroundStyle(.white.opacity(0.45))
+                }
+                Text(NotchNotification.oneLine([notification.subtitle, notification.body]
+                        .filter { !$0.isEmpty }.joined(separator: " · ")))
+                    .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.75))
+                    .lineLimit(2)
+            }
+        }
+        .padding(10)
+        .frame(height: 70, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(.white.opacity(0.1)))
+        .contentShape(Rectangle())
     }
 }

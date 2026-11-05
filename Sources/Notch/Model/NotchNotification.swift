@@ -10,6 +10,10 @@ struct NotchNotification: Identifiable, Hashable, Codable {
     let threadID: String?
     let date: Date
     var isTest: Bool = false
+    /// Raw open hints captured from the record (all optional; older history entries lack them).
+    var defaultURL: String? = nil
+    var chatJID: String? = nil
+    var senderPhone: String? = nil
 
     /// One-line text for the compact state: sender/title, falling back to the body.
     var summary: String {

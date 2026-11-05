@@ -11,6 +11,9 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var current: NotchNotification?
     @Published private(set) var pendingCount = 0
     @Published var selectedID: NotchNotification.ID?
+    /// Notification pinned at the top of the music hover panel (just shown, or arrived while it was open).
+    @Published private(set) var peekHighlight: NotchNotification?
+    private var lastShown: (item: NotchNotification, at: Date)?
     @Published var geometry: NotchGeometry
 
     let store: NotificationStore
@@ -106,8 +109,18 @@ final class NotchViewModel: ObservableObject {
         state == .music && settings.showLyrics && settings.showLyricStrip && lyrics.currentLine != nil
     }
 
-    private var peekLyricsHeight: CGFloat {
-        settings.showLyrics && lyrics.state != .off ? 70 : 0
+    /// Notifications listed in the music hover panel.
+    static let peekListLimit = 5
+    static let peekRowHeight: CGFloat = 30
+
+    private var musicPeekHeight: CGFloat {
+        var hgt = geometry.notchSize.height                          // top band beside the camera
+        if peekHighlight != nil { hgt += 78 }                        // pinned notification card
+        hgt += 70                                                    // compact player
+        if case .synced = lyrics.state, settings.showLyrics { hgt += 62 }
+        let count = store.visibleHistory.count
+        hgt += 24 + (count == 0 ? 22 : CGFloat(min(count, Self.peekListLimit)) * Self.peekRowHeight)
+        return hgt + 14
     }
 
     /// (left wing, right wing) for the compact states.
@@ -122,7 +135,7 @@ final class NotchViewModel: ObservableObject {
             let strip = (showsLyricStrip || showsLabelStrip) ? Self.lyricStripHeight : 0
             return CGSize(width: gapWidth + 2 * topRadius + l + r, height: h + strip)
         case .peek: return CGSize(width: max(w + 2 * topRadius + 2 * 150, 470), height: h + 112)
-        case .musicPeek: return CGSize(width: 480, height: h + 118 + peekLyricsHeight)
+        case .musicPeek: return CGSize(width: 480, height: min(musicPeekHeight, Self.panelSize.height - 20))
         case .expanded: return CGSize(width: 660, height: 430)
         }
     }
@@ -145,7 +158,13 @@ final class NotchViewModel: ObservableObject {
     private func enqueue(_ n: NotchNotification) {
         queue.append(n)
         pendingCount = queue.count
-        if state == .idle || state == .music || (state == .musicPeek && isAutoPeek) {
+        if state == .musicPeek && !isAutoPeek {
+            // The music hover panel is open: pin the new one at the top instead of queueing it.
+            peekHighlight = n
+            lastShown = (n, Date())
+            queue.removeAll { $0.id == n.id }
+            pendingCount = queue.count
+        } else if state == .idle || state == .music || (state == .musicPeek && isAutoPeek) {
             showNext()
         } else if state == .compact {
             // Others are waiting now: don't hold the current one for the full duration.
@@ -186,6 +205,7 @@ final class NotchViewModel: ObservableObject {
         }
         current = queue.removeFirst()
         pendingCount = queue.count
+        if let c = current { lastShown = (c, Date()) }
         state = .compact
         // Shorter dwell while others are waiting.
         let dwell = queue.isEmpty ? settings.displayDuration : min(settings.displayDuration, 2.0)
@@ -231,14 +251,22 @@ final class NotchViewModel: ObservableObject {
         switch state {
         case .compact:
             compactWork?.cancel()
-            state = .peek
+            if player.hasSession {
+                // Music + notification: the panel shows both, with this notification on top.
+                peekHighlight = current
+                state = .musicPeek
+            } else {
+                state = .peek
+            }
         case .music:
+            peekHighlight = recentlyShown
             state = .musicPeek
         case .musicPeek:
             isAutoPeek = false   // hovering takes over from the auto-peek timer
         case .idle:
             // A paused session can still be controlled from the idle notch.
             if player.hasSession {
+                peekHighlight = recentlyShown
                 state = .musicPeek
             } else {
                 current = store.visibleHistory.first
@@ -249,9 +277,17 @@ final class NotchViewModel: ObservableObject {
         }
     }
 
-    func expand() {
+    /// A notification shown in the last ~10 s (so hovering never buries a new message).
+    private var recentlyShown: NotchNotification? {
+        guard let l = lastShown, Date().timeIntervalSince(l.at) < 10,
+              store.visibleHistory.contains(where: { $0.id == l.item.id }) else { return nil }
+        return l.item
+    }
+
+    func expand(selecting id: NotchNotification.ID? = nil) {
         compactWork?.cancel()
-        selectedID = current?.id ?? store.visibleHistory.first?.id
+        selectedID = id ?? peekHighlight?.id ?? current?.id ?? store.visibleHistory.first?.id
+        peekHighlight = nil
         state = .expanded
     }
 
@@ -261,8 +297,15 @@ final class NotchViewModel: ObservableObject {
         expand()
     }
 
+    /// Double-click: open the notification's conversation (or app) and fold the notch away.
+    func open(_ n: NotchNotification) {
+        NotificationOpener.open(n)
+        collapse()
+    }
+
     func collapse() {
         isAutoPeek = false
+        peekHighlight = nil
         if queue.isEmpty { state = restingState } else { showNext() }
     }
 }
