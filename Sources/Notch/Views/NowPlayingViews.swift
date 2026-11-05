@@ -13,6 +13,8 @@ struct MarqueeText: View {
     var speed: CGFloat = 28        // points per second
     var gap: CGFloat = 28
     var pause: Double = 1.5
+    /// Where the text sits when it fits (scrolling always starts at the leading edge).
+    var alignment: Alignment = .leading
 
     @State private var textWidth: CGFloat = 0
     @State private var start = Date()
@@ -21,7 +23,7 @@ struct MarqueeText: View {
         GeometryReader { geo in
             let available = geo.size.width
             if textWidth <= available + 0.5 {
-                label.frame(width: available, height: height, alignment: .leading)
+                label.frame(width: available, height: height, alignment: alignment)
             } else {
                 TimelineView(.animation) { ctx in
                     let travel = textWidth + gap
@@ -219,7 +221,7 @@ struct CompactMusicView: View {
                 HStack(spacing: 0) {
                     ArtworkView(image: info.artwork, size: h - 12, corner: 5)
                         .frame(width: left)
-                    Color.clear.frame(width: g.notchSize.width)
+                    Color.clear.frame(width: vm.gapWidth)
                     SourceLogo(source: player.source, size: min(20, h - 14))
                         .frame(width: right)
                 }

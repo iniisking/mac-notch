@@ -19,8 +19,9 @@ struct NotchRootView: View {
             content
                 .frame(width: size.width, height: size.height, alignment: .top)
                 .clipShape(shape)
+                .mask(CameraExclusionMask(gap: vm.geometry.hasNotch ? vm.gapWidth : 0,
+                                          height: vm.geometry.notchSize.height))
         }
-        .offset(x: vm.shapeOffsetX)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: vm.state)
@@ -63,6 +64,23 @@ struct NotchRootView: View {
 }
 
 // MARK: - Shared bits
+
+/// Opaque everywhere except a top-centred rect over the camera housing (+ clearance), so no
+/// content can ever be drawn behind the camera, even mid-animation or mid-scroll.
+struct CameraExclusionMask: View {
+    let gap: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Rectangle().fill(.black)
+            if gap > 0 {
+                Rectangle().fill(.black).frame(width: gap, height: height).blendMode(.destinationOut)
+            }
+        }
+        .compositingGroup()
+    }
+}
 
 struct AppIconView: View {
     let bundleID: String

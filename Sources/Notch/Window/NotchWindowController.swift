@@ -55,7 +55,9 @@ final class NotchWindowController {
     private func layout() {
         let f = screen.frame
         let size = NotchViewModel.panelSize
-        let origin = NSPoint(x: f.midX - size.width / 2, y: f.maxY - size.height)
+        // Centre on the actual camera housing (its rect is in global coordinates).
+        let midX = viewModel.geometry.hasNotch ? viewModel.geometry.notchRect.midX : f.midX
+        let origin = NSPoint(x: (midX - size.width / 2).rounded(), y: f.maxY - size.height)
         panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
 
@@ -65,8 +67,7 @@ final class NotchWindowController {
     private var hitRect: NSRect {
         let s = viewModel.hitSize
         let f = panel.frame
-        let dx = viewModel.state == .idle ? 0 : viewModel.shapeOffsetX
-        return NSRect(x: f.midX + dx - s.width / 2, y: f.maxY - s.height, width: s.width, height: s.height)
+        return NSRect(x: f.midX - s.width / 2, y: f.maxY - s.height, width: s.width, height: s.height)
     }
 
     private func installMonitors() {

@@ -20,8 +20,6 @@ final class NotchViewModel: ObservableObject {
     var openSettings: () -> Void = {}
     var openFullDiskAccess: () -> Void = {}
 
-    /// Compact labels wider than this scroll.
-    static let maxLabelWing: CGFloat = 92
     /// Size of the panel that hosts the shape; big enough for the expanded state.
     static let panelSize = CGSize(width: 720, height: 470)
 
@@ -90,15 +88,18 @@ final class NotchViewModel: ObservableObject {
     /// Dynamic-Island style wing: about as wide as the notch is tall.
     var wing: CGFloat { geometry.notchSize.height + 6 }
 
-    /// Right wing in the compact notification state: as wide as the label needs, capped.
-    var labelWing: CGFloat {
-        guard let n = current else { return wing }
-        let text = (n.shortLabel as NSString).size(withAttributes: [.font: Self.labelFont]).width
-        return min(Self.maxLabelWing, max(wing, ceil(text) + 12))
-    }
+    /// Clearance kept on each side of the camera housing.
+    var gapPadding: CGFloat { geometry.hasNotch ? 4 : 0 }
 
-    static let labelFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    /// Width of the no-draw zone over the camera (housing + clearance).
+    var gapWidth: CGFloat { geometry.notchSize.width + 2 * gapPadding }
+
+    /// Strip under the compact notch (notification label or lyric line).
     static let lyricStripHeight: CGFloat = 20
+    static let stripFont = Font.system(size: 11.5, weight: .semibold)
+
+    /// The compact notification shows its label in the strip under the notch.
+    var showsLabelStrip: Bool { state == .compact && current != nil }
 
     /// Lyric line under the compact music notch (hidden in gaps / without lyrics).
     var showsLyricStrip: Bool {
@@ -110,12 +111,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     /// (left wing, right wing) for the compact states.
-    var wings: (CGFloat, CGFloat) {
-        switch state {
-        case .compact: return (wing, labelWing)
-        default: return (wing, wing)
-        }
-    }
+    var wings: (CGFloat, CGFloat) { (wing, wing) }
 
     var shapeSize: CGSize {
         let w = geometry.notchSize.width, h = geometry.notchSize.height
@@ -123,18 +119,12 @@ final class NotchViewModel: ObservableObject {
         case .idle: return CGSize(width: w + 2 * topRadius, height: h)
         case .compact, .music:
             let (l, r) = wings
-            let strip = showsLyricStrip ? Self.lyricStripHeight : 0
-            return CGSize(width: w + 2 * topRadius + l + r, height: h + strip)
+            let strip = (showsLyricStrip || showsLabelStrip) ? Self.lyricStripHeight : 0
+            return CGSize(width: gapWidth + 2 * topRadius + l + r, height: h + strip)
         case .peek: return CGSize(width: max(w + 2 * topRadius + 2 * 150, 470), height: h + 112)
         case .musicPeek: return CGSize(width: 480, height: h + 118 + peekLyricsHeight)
         case .expanded: return CGSize(width: 660, height: 430)
         }
-    }
-
-    /// Horizontal shift that keeps the camera gap over the hardware notch when wings differ.
-    var shapeOffsetX: CGFloat {
-        let (l, r) = wings
-        return (r - l) / 2
     }
 
     /// The idle shape is drawn invisibly so it can grow out of the hardware notch.

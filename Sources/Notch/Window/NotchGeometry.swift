@@ -6,21 +6,31 @@ struct NotchGeometry: Equatable {
     /// Hardware notch size. On notch-less screens: width 0, height = menu bar height.
     let notchSize: CGSize
     let screenFrame: CGRect
+    /// The camera housing in global screen coordinates: from the right edge of
+    /// auxiliaryTopLeftArea to the left edge of auxiliaryTopRightArea. Nothing may draw here.
+    /// On notch-less screens it's a zero-width rect at the top centre.
+    let notchRect: CGRect
 
     static func detect(for screen: NSScreen) -> NotchGeometry {
         let top = screen.safeAreaInsets.top
-        if top > 0 {
-            let left = screen.auxiliaryTopLeftArea?.width ?? 0
-            let right = screen.auxiliaryTopRightArea?.width ?? 0
-            var width = screen.frame.width - left - right
-            if width <= 0 || width > 400 { width = 200 }   // defensive: odd values
-            return NotchGeometry(hasNotch: true, notchSize: CGSize(width: width, height: top),
-                                 screenFrame: screen.frame)
+        let f = screen.frame
+        if top > 0, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea {
+            // The aux rects may be reported screen-local or global depending on the display's
+            // position; normalise to global.
+            let toGlobal: (CGFloat) -> CGFloat = { x in
+                (abs(l.minX - f.minX) < 1) ? x : x + f.minX
+            }
+            var minX = toGlobal(l.maxX), maxX = toGlobal(r.minX)
+            if maxX - minX <= 0 || maxX - minX > 400 {          // defensive: odd values
+                minX = f.midX - 100; maxX = f.midX + 100
+            }
+            let rect = CGRect(x: minX, y: f.maxY - top, width: maxX - minX, height: top)
+            return NotchGeometry(hasNotch: true, notchSize: rect.size, screenFrame: f, notchRect: rect)
         }
-        var menuBar = screen.frame.maxY - screen.visibleFrame.maxY
+        var menuBar = f.maxY - screen.visibleFrame.maxY
         if menuBar < 20 { menuBar = 24 }   // auto-hidden menu bar
-        return NotchGeometry(hasNotch: false, notchSize: CGSize(width: 0, height: menuBar),
-                             screenFrame: screen.frame)
+        return NotchGeometry(hasNotch: false, notchSize: CGSize(width: 0, height: menuBar), screenFrame: f,
+                             notchRect: CGRect(x: f.midX, y: f.maxY - menuBar, width: 0, height: menuBar))
     }
 }
 

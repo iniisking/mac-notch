@@ -5,7 +5,7 @@ struct SettingsView: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var store: NotificationStore
     @ObservedObject var player: NowPlayingService
-    let sendTest: () -> Void
+    @ObservedObject var notifier: SystemTestNotifier
     let openFullDiskAccess: () -> Void
     @State private var newBundleID = ""
 
@@ -33,6 +33,8 @@ struct SettingsView: View {
                     Text(msg).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
+
+            TestNotificationsSection(store: store, notifier: notifier)
 
             Section {
                 Toggle("Show now playing in the notch", isOn: $settings.nowPlayingEnabled)
@@ -84,8 +86,8 @@ struct SettingsView: View {
                 if let err = settings.launchAtLoginError {
                     Text(err).font(.caption).foregroundStyle(.orange)
                 }
-                Button("Send Test Notification", action: sendTest)
             }
+
 
             Section {
                 if appList.isEmpty {
@@ -124,7 +126,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 700)
+        .frame(width: 480, height: 760)
     }
 
     private var statusColor: Color {
@@ -154,7 +156,7 @@ final class SettingsWindowController {
 
     func show() {
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 700),
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 760),
                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
             w.title = "Notch Settings"
             w.isReleasedWhenClosed = false

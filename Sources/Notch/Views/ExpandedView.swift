@@ -33,7 +33,7 @@ struct ExpandedView: View {
 
     var body: some View {
         let g = vm.geometry
-        let sideWidth = (vm.shapeSize.width - g.notchSize.width) / 2 - vm.topRadius - 18
+        let sideWidth = (vm.shapeSize.width - vm.gapWidth) / 2 - vm.topRadius - 18
         VStack(spacing: 0) {
             // Top band beside the camera housing.
             HStack(spacing: 0) {

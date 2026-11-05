@@ -7,7 +7,7 @@ struct PeekView: View {
 
     var body: some View {
         let g = vm.geometry
-        let sideWidth = max(80, (vm.shapeSize.width - g.notchSize.width) / 2 - vm.topRadius - 16)
+        let sideWidth = max(80, (vm.shapeSize.width - vm.gapWidth) / 2 - vm.topRadius - 16)
         VStack(alignment: .leading, spacing: 0) {
             // Top band beside the camera housing.
             HStack(spacing: 0) {

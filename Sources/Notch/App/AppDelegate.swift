@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let settings = SettingsStore()
     private lazy var store = NotificationStore(settings: settings)
     private lazy var player = NowPlayingService(settings: settings)
+    private let testNotifier = SystemTestNotifier()
     private lazy var lyrics = LyricsService(player: player, settings: settings)
     private let source = DBNotificationSource()
     private var controllers: [CGDirectDisplayID: NotchWindowController] = [:]
@@ -15,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private lazy var settingsWindow = SettingsWindowController { [unowned self] in
         SettingsView(settings: self.settings, store: self.store, player: self.player,
-                     sendTest: { [unowned self] in self.store.injectTest() },
+                     notifier: self.testNotifier,
                      openFullDiskAccess: { [unowned self] in self.openFullDiskAccess() })
     }
     private lazy var onboarding = OnboardingWindowController(
@@ -31,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         rebuildWindows()
 
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
-            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .debounce(for: .milliseconds(80), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.rebuildWindows() }
             .store(in: &cancellables)
         settings.$showOnExternalDisplays
@@ -59,6 +60,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     self?.store.injectTest(index: i)
                 }
             }
+        }
+        // `--demo-label=Some Name`: one test notification with exactly that label (layout checks).
+        if let arg = args.first(where: { $0.hasPrefix("--demo-label=") }) {
+            let label = String(arg.dropFirst("--demo-label=".count))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.store.injectTest(label: label)
+            }
+        }
+        // `--test-preset=whatsapp|longMessage|mail|calendar|longSender|burst`, `--test-system`:
+        // the same actions as Settings › Test notifications (for scripted checks).
+        if let arg = args.first(where: { $0.hasPrefix("--test-preset=") }) {
+            let name = String(arg.dropFirst("--test-preset=".count))
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self else { return }
+                if name == "burst" {
+                    for (i, p) in [TestPreset.whatsapp, .mail, .calendar].enumerated() {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.25) { self.store.injectTest(p.make()) }
+                    }
+                } else if let p = TestPreset(rawValue: name) {
+                    self.store.injectTest(p.make())
+                }
+            }
+        }
+        if args.contains("--test-system") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.testNotifier.send() }
+        }
+        if args.contains("--open-settings") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.settingsWindow.show() }
         }
         if let demo = args.first(where: { $0.hasPrefix("--demo-music") }) {
             let kind = demo.split(separator: "=").dropFirst().first.map(String.init) ?? "spotify"
@@ -130,6 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Status / onboarding
 
     private func statusChanged(_ status: SourceStatus) {
+        DebugLog.write("notification source: \(status.label) (\(Bundle.main.bundlePath))")
         switch status {
         case .permissionDenied:
             if !onboardingShown {

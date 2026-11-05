@@ -48,6 +48,20 @@ final class NotificationStore: ObservableObject {
         arrivals.send(item)
     }
 
+    /// Injects any test item (never persisted: `isTest` items are filtered when saving).
+    func injectTest(_ item: NotchNotification) {
+        insert(item)
+        arrivals.send(item)
+    }
+
+    func injectTest(label: String) {
+        let item = NotchNotification(id: "test-\(UUID().uuidString)", recID: nil, bundleID: "net.whatsapp.WhatsApp",
+                                     title: label, subtitle: "", body: "Test message for layout checks.",
+                                     threadID: nil, date: Date(), isTest: true)
+        insert(item)
+        arrivals.send(item)
+    }
+
     func dismiss(_ id: NotchNotification.ID) {
         history.removeAll { $0.id == id }
         scheduleSave()
