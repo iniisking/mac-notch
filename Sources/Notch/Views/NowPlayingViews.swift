@@ -15,6 +15,8 @@ struct MarqueeText: View {
     var pause: Double = 1.5
     /// Where the text sits when it fits (scrolling always starts at the leading edge).
     var alignment: Alignment = .leading
+    /// Optional styled version of `text` (e.g. bold sender + dim preview). `text` must hold the same string.
+    var styled: Text? = nil
 
     @State private var textWidth: CGFloat = 0
     @State private var start = Date()
@@ -51,8 +53,12 @@ struct MarqueeText: View {
         .onChange(of: text) { _, _ in start = Date() }
     }
 
-    private var label: some View {
-        Text(text).font(font).foregroundStyle(color).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+    @ViewBuilder private var label: some View {
+        if let styled {
+            styled.font(font).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+        } else {
+            Text(text).font(font).foregroundStyle(color).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+        }
     }
 
     private func fadeMask(moving: Bool) -> some View {

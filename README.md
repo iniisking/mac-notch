@@ -114,6 +114,26 @@ by default). Re-enable in System Settings › Privacy & Security › Automation 
 If the MediaRemote helper ever stops working, Notch falls back to Spotify's AppleScript
 dictionary (this triggers a one-time "control Spotify" prompt).
 
+### Settings › Test notifications
+
+- **Presets**: WhatsApp message, Messages with a long body (for the expanded view), Mail (sender,
+  subject and long body), Calendar event, and a very long sender (for the strip marquee). They use real
+  installed app icons.
+- **Burst of 3**: tests the queue and the `+N` badge.
+- **Custom notification**: pick an installed app (or type any bundle id), enter title, subtitle and
+  body, then press Send.
+- **Send real system notification**: Notch posts an actual macOS notification and lets it come back
+  through Notification Center's database, the same path real notifications take (works with Focus on).
+  It usually appears within a few seconds; macOS occasionally delays or drops one. The first time,
+  macOS asks to allow notifications from Notch. It isn't injected locally, so it never appears twice.
+
+Test items behave like real ones (compact, strip, hover, expanded, open/copy/dismiss) but are never
+saved to history.
+
+The strip under the notch reads **"Sender - preview"**: chats show sender and message, Mail shows
+sender and subject, Calendar shows event and time/place, and other apps show title and body. The
+sender is semibold and the preview dimmer; long text scrolls.
+
 ### Testing the UI without real notifications
 
 - Menu bar › **Send Test Notification** (⌘T while the menu is open), or the same button in Settings.

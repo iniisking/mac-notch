@@ -84,7 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         if args.contains("--test-system") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.testNotifier.send() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.testNotifier.send() }
         }
         if args.contains("--open-settings") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.settingsWindow.show() }

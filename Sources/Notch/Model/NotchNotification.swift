@@ -30,6 +30,29 @@ struct NotchNotification: Identifiable, Hashable, Codable {
         return Self.clean(subtitle)
     }
 
+    /// Strip under the notch: "Sender - preview".
+    /// Chats/others: title - body. Mail: sender - subject (or body). Calendar: event - body (or subtitle).
+    var stripParts: (primary: String, secondary: String) {
+        let id = bundleID.lowercased()
+        let t = Self.oneLine(title), sub = Self.oneLine(subtitle), b = Self.oneLine(body)
+        let isMail = ["com.apple.mail", "com.microsoft.outlook", "com.readdle.smartemail-mac", "com.superhuman.electron",
+                      "com.google.gmail", "it.bloop.airmail2"].contains(id)
+        let isCalendar = ["com.apple.ical", "com.flexibits.fantastical2.mac", "com.microsoft.outlook.calendar"].contains(id)
+        var primary = t
+        var secondary: String
+        if isMail { secondary = sub.isEmpty ? b : sub }
+        else if isCalendar { secondary = b.isEmpty ? sub : b }
+        else { secondary = b.isEmpty ? sub : b }
+        if primary.isEmpty { primary = secondary; secondary = "" }
+        if primary == secondary { secondary = "" }
+        return (primary, secondary)
+    }
+
+    /// Single line: invisible marks stripped, newlines/tabs collapsed to single spaces.
+    static func oneLine(_ s: String) -> String {
+        clean(s).components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
     static func clean(_ s: String) -> String {
         let invisible: Set<Unicode.Scalar> = ["\u{200B}", "\u{200C}", "\u{200D}", "\u{200E}", "\u{200F}",
                                               "\u{202A}", "\u{202B}", "\u{202C}", "\u{202D}", "\u{202E}",

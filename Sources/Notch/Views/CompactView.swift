@@ -30,13 +30,22 @@ struct CompactView: View {
                 }
                 .frame(height: h)
 
-                MarqueeText(text: n.shortLabel, font: NotchViewModel.stripFont,
-                            color: .white.opacity(0.92), height: 16, alignment: .center)
+                let parts = n.stripParts
+                MarqueeText(text: parts.secondary.isEmpty ? parts.primary : "\(parts.primary) - \(parts.secondary)",
+                            font: .system(size: 11.5), height: 16, alignment: .center,
+                            styled: Self.styled(parts))
                     .padding(.horizontal, 10)
                     .frame(height: NotchViewModel.lyricStripHeight - 4, alignment: .top)
             }
             .padding(.horizontal, vm.topRadius)
             .id(n.id)
         }
+    }
+
+    /// Sender in semibold white, " - preview" regular and dimmer.
+    static func styled(_ parts: (primary: String, secondary: String)) -> Text {
+        let sender = Text(parts.primary).fontWeight(.semibold).foregroundColor(.white.opacity(0.95))
+        guard !parts.secondary.isEmpty else { return sender }
+        return sender + Text(" - " + parts.secondary).fontWeight(.regular).foregroundColor(.white.opacity(0.6))
     }
 }

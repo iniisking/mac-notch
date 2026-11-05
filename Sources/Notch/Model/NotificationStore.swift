@@ -37,6 +37,9 @@ final class NotificationStore: ObservableObject {
                 let isNew = !history.contains { $0.id == item.id }
                 insert(item)
                 if live, isNew, !settings.isMuted(item.bundleID) { arrivals.send(item) }
+                if item.bundleID.lowercased() == "com.theajstars.notch" {
+                    DebugLog.write("own test notification from DB: live=\(live) new=\(isNew) rec=\(item.recID ?? -1)")
+                }
             }
         }
     }
