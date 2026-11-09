@@ -205,7 +205,7 @@ struct DevicesPage: View {
                 }
                 if bridge.devices.isEmpty && audio.devices.isEmpty && !calls.cameraIsIPhone {
                     Text(settings.bridgeEnabled
-                         ? "Waiting for your iPhone. Run the Notch Shortcut on it once (Settings › iPhone bridge)."
+                         ? "Waiting for your iPhone. Build the battery Shortcut on it and run it once (steps in Settings › iPhone bridge)."
                          : "No headphones connected. Turn on the iPhone bridge in Settings to see your iPhone's battery here.")
                         .font(.system(size: 11)).foregroundStyle(.white.opacity(0.45))
                         .fixedSize(horizontal: false, vertical: true)
