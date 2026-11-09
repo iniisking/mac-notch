@@ -263,7 +263,7 @@ struct PlayerControlsView: View {
                         }
                         SourceLogo(source: player.source, size: 18)
                     }
-                    ProgressRow(info: info)
+                    ProgressRow(info: info, onSeek: { player.seek(to: $0) })
                     HStack(spacing: 22) {
                         Spacer(minLength: 0)
                         controlButton("backward.fill", size: 14) { player.send(.previous) }
@@ -290,27 +290,52 @@ struct PlayerControlsView: View {
     }
 }
 
-private struct ProgressRow: View {
+/// Elapsed / bar / duration. Drag (or click) the bar to seek when `onSeek` is set.
+struct ProgressRow: View {
     let info: NowPlayingInfo
+    var onSeek: ((Double) -> Void)? = nil
+    @State private var dragFraction: Double?
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { ctx in
             let elapsed = info.elapsed(at: ctx.date)
-            let fraction = info.duration > 0 ? min(1, elapsed / info.duration) : 0
+            let live = info.duration > 0 ? min(1, elapsed / info.duration) : 0
+            let fraction = dragFraction ?? live
+            let scrubbing = dragFraction != nil
             HStack(spacing: 8) {
-                Text(elapsed.mmss).monospacedDigit()
+                Text((dragFraction.map { $0 * info.duration } ?? elapsed).mmss).monospacedDigit()
+                    .foregroundStyle(.white.opacity(scrubbing ? 0.9 : 0.55))
                 GeometryReader { g in
+                    let barHeight: CGFloat = scrubbing ? 6 : 4
                     ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.18))
-                        Capsule().fill(.white).frame(width: max(4, g.size.width * fraction))
+                        Capsule().fill(.white.opacity(0.18)).frame(height: barHeight)
+                        Capsule().fill(.white).frame(width: max(barHeight, g.size.width * fraction), height: barHeight)
                     }
+                    .frame(width: g.size.width, height: g.size.height)
+                    .contentShape(Rectangle())
+                    .gesture(seekGesture(width: g.size.width))
+                    .animation(.easeOut(duration: 0.12), value: scrubbing)
                 }
-                .frame(height: 4)
+                .frame(height: 12)
                 Text(info.duration > 0 ? info.duration.mmss : "--:--").monospacedDigit()
             }
             .font(.system(size: 9.5, weight: .medium))
             .foregroundStyle(.white.opacity(0.55))
         }
+    }
+
+    private func seekGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { v in
+                guard onSeek != nil, info.duration > 0, width > 0 else { return }
+                dragFraction = min(1, max(0, Double(v.location.x / width)))
+            }
+            .onEnded { v in
+                guard let onSeek, info.duration > 0, width > 0 else { dragFraction = nil; return }
+                let f = min(1, max(0, Double(v.location.x / width)))
+                onSeek(f * info.duration)
+                dragFraction = nil
+            }
     }
 }
 
@@ -332,9 +357,15 @@ struct MusicPeekView: View {
                 Text("Now Playing").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white.opacity(0.6))
                     .frame(width: side, alignment: .leading)
                 Spacer(minLength: 0)
-                Text(player.source?.displayName ?? "").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
-                    .lineLimit(1)
-                    .frame(width: side, alignment: .trailing)
+                Group {
+                    if case .synced = lyrics.state, vm.settings.showLyrics {
+                        LyricsTimingControl(lyrics: lyrics)
+                    } else {
+                        Text(player.source?.displayName ?? "").font(.system(size: 11)).foregroundStyle(.white.opacity(0.5))
+                            .lineLimit(1)
+                    }
+                }
+                .frame(width: side, alignment: .trailing)
             }
             .frame(height: g.notchSize.height)
 
@@ -412,7 +443,7 @@ struct CompactPlayerRow: View {
                             smallButton("forward.fill", 11) { player.send(.next) }
                         }
                     }
-                    ProgressRow(info: info)
+                    ProgressRow(info: info, onSeek: { player.seek(to: $0) })
                 }
             }
             .frame(height: 56)

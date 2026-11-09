@@ -6,6 +6,8 @@ struct NotchRootView: View {
     @ObservedObject var settings: SettingsStore
     @ObservedObject var player: NowPlayingService
     @ObservedObject var lyrics: LyricsService
+    @ObservedObject var calls: CallMonitor
+    @ObservedObject var power: PowerMonitor
 
     var body: some View {
         let size = vm.shapeSize
@@ -27,6 +29,7 @@ struct NotchRootView: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: vm.state)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.current?.id)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.showsLyricStrip)
+        .animation(.spring(response: 0.38, dampingFraction: 0.85), value: calls.pastHour)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.peekHighlight?.id)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: store.visibleHistory.count)
     }
@@ -41,6 +44,20 @@ struct NotchRootView: View {
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
                 .contentShape(Rectangle())
                 .onTapGesture { vm.expand() }
+        case .call:
+            CompactCallView(vm: vm, calls: calls)
+                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
+                                        removal: .opacity.animation(.easeIn(duration: 0.1))))
+        case .callPeek:
+            CallPeekView(vm: vm, calls: calls)
+                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
+                                        removal: .opacity.animation(.easeIn(duration: 0.1))))
+        case .battery:
+            if let e = vm.batteryEvent {
+                CompactBatteryView(vm: vm, power: power, event: e)
+                    .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
+                                            removal: .opacity.animation(.easeIn(duration: 0.1))))
+            }
         case .musicPeek:
             MusicPeekView(vm: vm, player: player, lyrics: lyrics, store: store)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),

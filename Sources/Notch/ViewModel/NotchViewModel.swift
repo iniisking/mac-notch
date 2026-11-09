@@ -5,7 +5,7 @@ import SwiftUI
 /// UI state for one notch window (one per screen). History lives in the shared NotificationStore.
 @MainActor
 final class NotchViewModel: ObservableObject {
-    enum State: Equatable { case idle, music, compact, peek, musicPeek, expanded }
+    enum State: Equatable { case idle, music, call, battery, compact, peek, musicPeek, callPeek, expanded }
 
     @Published private(set) var state: State = .idle
     @Published private(set) var current: NotchNotification?
@@ -20,6 +20,12 @@ final class NotchViewModel: ObservableObject {
     let settings: SettingsStore
     let player: NowPlayingService
     let lyrics: LyricsService
+    let calls: CallMonitor
+    let power: PowerMonitor
+    /// What the brief battery moment is showing (plugged in / low).
+    @Published private(set) var batteryEvent: PowerEvent?
+    private var pendingBattery: (event: PowerEvent, at: Date)?
+    private var batteryWork: DispatchWorkItem?
     var openSettings: () -> Void = {}
     var openFullDiskAccess: () -> Void = {}
 
@@ -36,19 +42,38 @@ final class NotchViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init(geometry: NotchGeometry, store: NotificationStore, settings: SettingsStore,
-         player: NowPlayingService, lyrics: LyricsService) {
+         player: NowPlayingService, lyrics: LyricsService, calls: CallMonitor, power: PowerMonitor) {
         self.geometry = geometry
         self.store = store
         self.settings = settings
         self.player = player
         self.lyrics = lyrics
+        self.calls = calls
+        self.power = power
+        // Calls take over the resting state from music, and hand it back when they end.
+        calls.$call
+            .map { $0 != nil }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                DispatchQueue.main.async {
+                    if [.idle, .music, .call].contains(self.state) { self.state = self.restingState }
+                    if self.state == .callPeek, self.calls.call == nil { self.collapse() }
+                }
+            }
+            .store(in: &cancellables)
+        power.events
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.showBattery($0) }
+            .store(in: &cancellables)
         // Music comes and goes underneath notifications.
         player.$showInNotch
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                if self.state == .idle || self.state == .music { self.state = self.restingState }
+                if [.idle, .music, .call].contains(self.state) { self.state = self.restingState }
             }
             .store(in: &cancellables)
         // Track changes: briefly drop down so you can see what's playing.
@@ -73,8 +98,8 @@ final class NotchViewModel: ObservableObject {
     var topRadius: CGFloat {
         switch state {
         case .idle: return 6
-        case .music, .compact: return 8
-        case .peek, .musicPeek: return 12
+        case .music, .call, .battery, .compact: return 8
+        case .peek, .musicPeek, .callPeek: return 12
         case .expanded: return 14
         }
     }
@@ -82,8 +107,8 @@ final class NotchViewModel: ObservableObject {
     var bottomRadius: CGFloat {
         switch state {
         case .idle: return 8
-        case .music, .compact: return 12
-        case .peek, .musicPeek: return 20
+        case .music, .call, .battery, .compact: return 12
+        case .peek, .musicPeek, .callPeek: return 20
         case .expanded: return 26
         }
     }
@@ -117,23 +142,28 @@ final class NotchViewModel: ObservableObject {
         var hgt = geometry.notchSize.height                          // top band beside the camera
         if peekHighlight != nil { hgt += 78 }                        // pinned notification card
         hgt += 70                                                    // compact player
-        if case .synced = lyrics.state, settings.showLyrics { hgt += 62 }
+        if case .synced = lyrics.state, settings.showLyrics { hgt += 62 + (lyrics.hasExtraLine ? 16 : 0) }
         let count = store.visibleHistory.count
         hgt += 24 + (count == 0 ? 22 : CGFloat(min(count, Self.peekListLimit)) * Self.peekRowHeight)
         return hgt + 14
     }
 
-    /// (left wing, right wing) for the compact states.
-    var wings: (CGFloat, CGFloat) { (wing, wing) }
+    /// (left wing, right wing) for the compact states. Calls past an hour widen both wings
+    /// symmetrically so "1:02:33" fits.
+    var wings: (CGFloat, CGFloat) {
+        if state == .call, calls.pastHour { return (wing + 12, wing + 12) }
+        return (wing, wing)
+    }
 
     var shapeSize: CGSize {
         let w = geometry.notchSize.width, h = geometry.notchSize.height
         switch state {
         case .idle: return CGSize(width: w + 2 * topRadius, height: h)
-        case .compact, .music:
+        case .compact, .music, .call, .battery:
             let (l, r) = wings
-            let strip = (showsLyricStrip || showsLabelStrip) ? Self.lyricStripHeight : 0
+            let strip = (showsLyricStrip || showsLabelStrip || state == .battery) ? Self.lyricStripHeight : 0
             return CGSize(width: gapWidth + 2 * topRadius + l + r, height: h + strip)
+        case .callPeek: return CGSize(width: max(w + 2 * topRadius + 2 * 150, 440), height: h + 64)
         case .peek: return CGSize(width: max(w + 2 * topRadius + 2 * 150, 470), height: h + 112)
         case .musicPeek: return CGSize(width: 480, height: min(musicPeekHeight, Self.panelSize.height - 20))
         case .expanded: return CGSize(width: 660, height: 430)
@@ -164,7 +194,7 @@ final class NotchViewModel: ObservableObject {
             lastShown = (n, Date())
             queue.removeAll { $0.id == n.id }
             pendingCount = queue.count
-        } else if state == .idle || state == .music || (state == .musicPeek && isAutoPeek) {
+        } else if [.idle, .music, .call, .battery].contains(state) || (state == .musicPeek && isAutoPeek) {
             showNext()
         } else if state == .compact {
             // Others are waiting now: don't hold the current one for the full duration.
@@ -172,8 +202,50 @@ final class NotchViewModel: ObservableObject {
         }
     }
 
-    /// What the notch shows when nothing else is going on.
-    var restingState: State { player.showInNotch ? .music : .idle }
+    /// What the notch shows when nothing else is going on: a call, then music, then nothing.
+    var restingState: State {
+        if settings.showCalls, calls.call != nil { return .call }
+        return player.showInNotch ? .music : .idle
+    }
+
+    // MARK: - Battery moment
+
+    private func showBattery(_ event: PowerEvent) {
+        switch event {
+        case .pluggedIn: guard settings.showCharging else { return }
+        case .low: guard settings.lowBatteryAlerts else { return }
+        }
+        // Busy with a notification or a card: show it once things settle (if still relevant).
+        let canShow = [.idle, .music, .call, .battery].contains(state) || (state == .musicPeek && isAutoPeek)
+        guard canShow, !isHovering else {
+            pendingBattery = (event, Date())
+            return
+        }
+        presentBattery(event)
+    }
+
+    private func presentBattery(_ event: PowerEvent) {
+        pendingBattery = nil
+        isAutoPeek = false
+        autoPeekWork?.cancel()
+        batteryEvent = event
+        state = .battery
+        batteryWork?.cancel()
+        let isLow: Bool = { if case .low = event { return true } else { return false } }()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.state == .battery else { return }
+            self.state = self.restingState
+        }
+        batteryWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + (isLow ? 5 : 3), execute: work)
+    }
+
+    /// A battery event that was held back while a notification was showing (fresh ones only).
+    private func takePendingBattery() -> PowerEvent? {
+        guard let p = pendingBattery else { return nil }
+        pendingBattery = nil
+        return Date().timeIntervalSince(p.at) < 20 ? p.event : nil
+    }
 
     private func autoPeekIfResting(attempt: Int = 0) {
         // Music may only just be starting (still idle): try again shortly.
@@ -200,7 +272,7 @@ final class NotchViewModel: ObservableObject {
         compactWork?.cancel()
         isAutoPeek = false
         guard !queue.isEmpty else {
-            state = restingState
+            if let b = takePendingBattery() { presentBattery(b) } else { state = restingState }
             return
         }
         current = queue.removeFirst()
@@ -239,7 +311,7 @@ final class NotchViewModel: ObservableObject {
         } else {
             let work = DispatchWorkItem { [weak self] in
                 guard let self, !self.isHovering else { return }
-                if [.peek, .musicPeek, .expanded].contains(self.state) { self.collapse() }
+                if [.peek, .musicPeek, .callPeek, .expanded].contains(self.state) { self.collapse() }
             }
             hoverWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
@@ -261,6 +333,13 @@ final class NotchViewModel: ObservableObject {
         case .music:
             peekHighlight = recentlyShown
             state = .musicPeek
+        case .call:
+            state = .callPeek
+        case .battery:
+            // Hovering ends the battery moment and behaves like hovering the resting notch.
+            batteryWork?.cancel()
+            state = restingState
+            hoverBegan()
         case .musicPeek:
             isAutoPeek = false   // hovering takes over from the auto-peek timer
         case .idle:
@@ -272,7 +351,7 @@ final class NotchViewModel: ObservableObject {
                 current = store.visibleHistory.first
                 state = .peek
             }
-        case .peek, .expanded:
+        case .peek, .callPeek, .expanded:
             break
         }
     }
@@ -306,6 +385,6 @@ final class NotchViewModel: ObservableObject {
     func collapse() {
         isAutoPeek = false
         peekHighlight = nil
-        if queue.isEmpty { state = restingState } else { showNext() }
+        showNext()   // queued notifications, then a held-back battery moment, then the resting state
     }
 }

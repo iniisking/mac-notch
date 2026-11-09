@@ -33,9 +33,38 @@ own database instead of mirroring on-screen banners.
   "- Topic", "Artist - Song" splitting). Timing uses MediaRemote's position
   (elapsed + time since its timestamp × rate), resynced on every play, pause or seek, plus an
   adjustable offset (Settings › Lyrics, ±0.1 s steps).
+- **Karaoke, romanization, translation**: the sung part of the line sweeps bright over a dim line,
+  in the strip and the hover card, and long lines scroll to keep the sweep in view. When LRCLIB has
+  enhanced LRC (`<mm:ss.xx>` word tags) the sweep follows real word timings; otherwise it is
+  estimated from the line length and the gap to the next line. Settings › Lyrics › *Second line*
+  adds a romanization (offline: Japanese via the system tokenizer's readings, so kanji read as
+  Japanese, and other scripts via ICU Any-Latin, with pinyin tones, Hangul and Cyrillic) or an
+  on-device translation into the Mac's language (Apple Translation, macOS 26+; download the language
+  pair in System Settings › General › Language & Region › Translation Languages). Translations are
+  cached in `lyrics/translations`. Songs already in your language get no second line. *Use the
+  second line in the strip* shows it under the notch instead of the original.
+- **Per-song lyric timing**: the hover card header has − / Sync / + (0.2 s steps) for the playing
+  song only, on top of the global offset. It is saved per track; click the value to reset.
+- **Scrubbing**: drag or click the progress bar in the hover card or expanded player to seek.
+- **Calls**: while a call app records from the microphone, the notch rests as a call instead of
+  music. The app icon is in the left wing and a green timer in the right wing; both wings widen past an
+  hour, and a red mic-slash badge shows when the mic is muted. Hover for a card with mic and camera
+  state, **Mute** (mutes the Mac's default input device, and is undone automatically when the call ends
+  or Notch quits) and **Show** (brings the app, or the meeting's browser tab, to the front).
+  Detection uses CoreAudio's per-process objects (macOS 14.2+, no permission): FaceTime and iPhone
+  calls show up as `avconferenced`; Zoom, Teams, Slack, Discord, WhatsApp, Telegram, Signal, Webex,
+  Skype and browsers are recognised. For browsers, Notch reads tab URLs (same Automation permission as
+  the music classifier) to name Google Meet, Teams, Zoom, Slack, Discord, Whereby and Jitsi.
+  A call starts after 2 s of mic use (skips dictation blips) and ends after 4 s without it.
+  Settings › *Count any app using the microphone* widens this to any regular app.
+- **Charging & battery**: plugging in shows a brief "67% · battery" moment with "Charging · full in
+  48m" (or "Fully charged" / "charging paused") in the strip. On battery, 20% and 10% show a red
+  "Low battery · 34m left" moment. It uses IOKit power-source notifications (no permission). If a
+  notification is on screen it waits, and it is dropped if it's more than 20 s old.
 - **Menu-bar bell** (no Dock icon): Show Notifications, Send Test Notification, Settings, Quit.
 - **Settings**: per-app mute list, display duration, launch at login, show on external
-  displays, test notification, source status, and clear history.
+  displays, test notification, source status, clear history, lyrics (karaoke, second line), and
+  Calls & Battery toggles.
 
 On screens without a notch, Notch uses an invisible pill at the top centre that behaves the same way.
 
@@ -142,6 +171,12 @@ sender is semibold and the preview dimmer; long text scrolls.
   `--demo-music[=spotify|youtubemusic|youtube]` shows a fake track (stops the real helper);
   `--media-selftest` sends play/pause, pause, next, previous and pause to whatever is playing and
   logs the results to `~/Library/Application Support/Notch/debug.log`.
+- `--demo-call[=zoom|facetime|meet]` fakes a call (`meet` started over an hour ago, for the wide
+  timer); `--demo-charge` / `--demo-lowbattery` fake the battery moments. `--peek-delay=<s>` delays
+  `--peek` (e.g. `--demo-call --peek --peek-delay=6` for the call card).
+- `--snapshot` renders the notch to `~/Library/Application Support/Notch/snapshots/<state>.png`
+  1.2 s after every state change. It needs no Screen Recording permission, so it works from scripts and
+  agents.
 - If you launch Notch from a terminal or another tool, macOS attributes its Automation prompt to
   that parent app (e.g. "Terminal wants to control Google Chrome"). Launch it from Finder,
   Spotlight or login items so the prompt names Notch.
@@ -160,6 +195,8 @@ Sources/
     Views/                        NotchShape, NotchRootView, CompactView, PeekView, ExpandedView
     Settings/                     SettingsStore, SettingsView, OnboardingWindow
     NowPlaying/                   NowPlayingService (helper process + Spotify fallback), SourceClassifier, models
+    Lyrics/                       LyricsService (LRCLIB, sync clock, karaoke), LyricsExtras (romanize / translate)
+    Activities/                   CallMonitor (CoreAudio mic users, camera, input mute), PowerMonitor (IOKit)
   NotchMedia/                     libNotchMedia.dylib (MediaRemote via perl) + notch-media.pl
   notch-dbcheck/main.swift        CLI
 ```
@@ -194,6 +231,12 @@ Sources/
   failure isn't cached, so it retries on the next play.
 - Now Playing relies on private MediaRemote behaviour; a future macOS could close the perl route.
   YouTube vs YouTube Music in a browser is a best guess from open tab URLs/titles.
+- Karaoke timing is estimated for most songs, because LRCLIB rarely has word-level tags. It reads
+  well for steady lines but can run ahead on slow, drawn-out ones.
+- Call detection sees *who* holds the mic, not the call itself: a voice memo in WhatsApp or a
+  browser tab recording audio also counts. The mute button mutes the input device, so the call
+  app's own mute icon won't change. Some devices (certain USB interfaces) have no mute control,
+  and then the button is hidden.
 - Hover detection uses global mouse-move monitoring, which needs no extra permission.
   Keyboard shortcuts aren't supported.
 - Personal use only. It isn't sandboxed and isn't suitable for the App Store.

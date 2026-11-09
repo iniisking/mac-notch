@@ -55,6 +55,14 @@ struct SettingsView: View {
                 Toggle("Show lyrics", isOn: $settings.showLyrics)
                 Toggle("Show lyric line under the notch", isOn: $settings.showLyricStrip)
                     .disabled(!settings.showLyrics)
+                Toggle("Karaoke highlight", isOn: $settings.lyricsKaraoke)
+                    .disabled(!settings.showLyrics)
+                Picker("Second line", selection: $settings.lyricsExtra) {
+                    ForEach(LyricsExtra.allCases) { Text($0.label).tag($0) }
+                }
+                .disabled(!settings.showLyrics)
+                Toggle("Use the second line in the strip", isOn: $settings.lyricsExtraInStrip)
+                    .disabled(!settings.showLyrics || settings.lyricsExtra == .off)
                 LabeledContent("Timing offset") {
                     HStack {
                         Stepper(value: $settings.lyricsOffset, in: -5...5, step: 0.1) {
@@ -66,7 +74,20 @@ struct SettingsView: View {
             } header: {
                 Text("Lyrics")
             } footer: {
-                Text("Synced lyrics from LRCLIB (lrclib.net), cached on this Mac. Positive offset shows lines earlier.")
+                Text("Synced lyrics from LRCLIB (lrclib.net), cached on this Mac. Positive offset shows lines earlier; nudge a single song from the hover card. Karaoke uses word timings when LRCLIB has them, otherwise an estimate. Romanization is offline; translation uses Apple Translation (macOS 26+, download languages in System Settings › General › Language & Region).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Show a call timer during calls", isOn: $settings.showCalls)
+                Toggle("Count any app using the microphone", isOn: $settings.callsAnyApp)
+                    .disabled(!settings.showCalls)
+                Toggle("Show charging when power connects", isOn: $settings.showCharging)
+                Toggle("Low battery alerts (20% and 10%)", isOn: $settings.lowBatteryAlerts)
+            } header: {
+                Text("Calls & Battery")
+            } footer: {
+                Text("Calls are detected from which app is recording from the microphone: FaceTime, Phone, Zoom, Teams, Slack, Discord, WhatsApp, Telegram, Signal, Webex and browsers (Meet, Teams and Zoom tabs are named). The hover card's mute button mutes the Mac's input device.")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
@@ -126,7 +147,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 760)
+        .frame(width: 480, height: 820)
     }
 
     private var statusColor: Color {
@@ -156,7 +177,7 @@ final class SettingsWindowController {
 
     func show() {
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 760),
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 820),
                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
             w.title = "Notch Settings"
             w.isReleasedWhenClosed = false

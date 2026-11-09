@@ -2,9 +2,16 @@ import AppKit
 import Combine
 import CryptoKit
 
+struct LyricWord: Equatable, Codable {
+    let time: Double     // seconds from track start
+    let text: String     // empty = end-of-line marker
+}
+
 struct LyricLine: Equatable, Codable {
     let time: Double     // seconds from track start
     let text: String     // empty = instrumental gap marker
+    /// Word timings from enhanced LRC (`<mm:ss.xx>` tags), when the file has them.
+    var words: [LyricWord]? = nil
 }
 
 enum LyricsState: Equatable {
@@ -26,11 +33,18 @@ final class LyricsService: ObservableObject {
     @Published private(set) var anchorIndex = -1
     /// When the current line started (wall clock), for timing long-line scrolling.
     private(set) var currentLineStart = Date()
+    /// Second line per lyric index (romanization or translation, per Settings).
+    @Published private(set) var extras: [Int: String] = [:]
+    /// Why there is no second line (e.g. translation language not downloaded).
+    @Published private(set) var extrasNote: String?
+    /// Timing nudge for this song only, on top of the global offset (saved per track).
+    @Published private(set) var trackOffset: Double = 0
 
     private let player: NowPlayingService
     private let settings: SettingsStore
     private var trackKey: String?
     private var fetchTask: Task<Void, Never>?
+    private var extrasTask: Task<Void, Never>?
     private var ticker: Timer?
     private var cancellables = Set<AnyCancellable>()
 
@@ -54,6 +68,33 @@ final class LyricsService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.tick() }
             .store(in: &cancellables)
+        // Views read these through the service.
+        settings.$lyricsKaraoke.merge(with: settings.$lyricsExtraInStrip)
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        settings.$lyricsExtra
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.refreshExtras() } }
+            .store(in: &cancellables)
+    }
+
+    var karaokeEnabled: Bool { settings.lyricsKaraoke }
+    var isPlaying: Bool { player.info?.isPlaying ?? false }
+
+    /// Global offset + this track's nudge.
+    var effectiveOffset: Double { settings.lyricsOffset + trackOffset }
+
+    /// Whether the hover card reserves a row for the second line (or the note explaining its absence).
+    var hasExtraLine: Bool { settings.lyricsExtra != .off && (!extras.isEmpty || extrasNote != nil) }
+
+    /// Text for the strip under the notch: the second line instead of the original when asked.
+    func stripText(for index: Int) -> String {
+        if settings.lyricsExtraInStrip, let e = extras[index], !e.isEmpty { return e }
+        return lines[index].text
     }
 
     var lines: [LyricLine] {
@@ -83,7 +124,11 @@ final class LyricsService: ObservableObject {
         }
         if info.trackKey != trackKey {
             trackKey = info.trackKey
+            trackOffset = TrackOffsets.get(info.trackKey)
             setIndex(nil)
+            extrasTask?.cancel()
+            extras = [:]
+            extrasNote = nil
             fetch(for: info)
         }
         // Every MediaRemote update (play, pause, seek) resyncs.
@@ -101,6 +146,7 @@ final class LyricsService: ObservableObject {
             guard let self, !Task.isCancelled, self.trackKey == key else { return }
             self.state = result
             DebugLog.write("lyrics '\(query.title)' / '\(query.artist)': \(Self.describe(result))")
+            self.refreshExtras()
             self.infoChanged(self.player.info)
         }
     }
@@ -137,7 +183,7 @@ final class LyricsService: ObservableObject {
             if anchorIndex != -1 { anchorIndex = -1 }
             return
         }
-        let position = info.elapsed(at: Date()) + settings.lyricsOffset
+        let position = info.elapsed(at: Date()) + effectiveOffset
         // Last line whose time has passed.
         var lo = 0, hi = l.count - 1, found = -1
         while lo <= hi {
@@ -159,7 +205,104 @@ final class LyricsService: ObservableObject {
 
     /// Seeks the player to a line (hover card click).
     func seek(to line: LyricLine) {
-        player.seek(to: max(0, line.time - settings.lyricsOffset + 0.05))
+        player.seek(to: max(0, line.time - effectiveOffset + 0.05))
+    }
+
+    // MARK: - Karaoke
+
+    /// How much of the current line has been sung, 0…1 (by characters). Uses word timings when the
+    /// LRC has them; otherwise an estimate from the line's length and the time until the next line.
+    func karaokeProgress(at date: Date) -> Double {
+        guard let i = currentIndex, let info = player.info else { return 0 }
+        let l = lines
+        guard i < l.count else { return 0 }
+        let line = l[i]
+        let pos = info.elapsed(at: date) + effectiveOffset
+        let lineEnd = i + 1 < l.count ? l[i + 1].time : line.time + 6
+        if let words = line.words, words.contains(where: { !$0.text.isEmpty }) {
+            let counts = words.map { Double($0.text.filter { !$0.isWhitespace }.count) }
+            let total = counts.reduce(0, +)
+            guard total > 0 else { return 1 }
+            var done = 0.0
+            for (k, w) in words.enumerated() {
+                let next = k + 1 < words.count ? words[k + 1].time : min(lineEnd, w.time + max(0.4, counts[k] * 0.15))
+                if pos >= next { done += counts[k]; continue }
+                if pos > w.time { done += counts[k] * (pos - w.time) / max(0.05, next - w.time) }
+                break
+            }
+            return min(1, max(0, done / total))
+        }
+        let span = Self.estimatedSpan(chars: line.text.count, gap: lineEnd - line.time)
+        return min(1, max(0, (pos - line.time) / span))
+    }
+
+    /// Roughly how long a line takes to sing: ~6 characters a second, never past 90% of the gap
+    /// to the next line (so long instrumental tails don't stretch the sweep).
+    static func estimatedSpan(chars: Int, gap: Double) -> Double {
+        max(0.4, min(gap * 0.9, Double(chars) * 0.16 + 0.6))
+    }
+
+    // MARK: - Per-track timing
+
+    /// Nudges this song's timing (hover card ±). Positive = lyrics earlier.
+    func nudgeTrackOffset(_ delta: Double) {
+        guard let key = trackKey else { return }
+        trackOffset = ((trackOffset + delta) * 10).rounded() / 10
+        TrackOffsets.set(trackOffset, for: key)
+        tick()
+    }
+
+    func resetTrackOffset() {
+        guard let key = trackKey else { return }
+        trackOffset = 0
+        TrackOffsets.set(0, for: key)
+        tick()
+    }
+
+    // MARK: - Romanization / translation
+
+    private func refreshExtras() {
+        extrasTask?.cancel()
+        extras = [:]
+        extrasNote = nil
+        guard case .synced(let l) = state, settings.showLyrics else { return }
+        let texts = l.map(\.text)
+        let key = trackKey
+        switch settings.lyricsExtra {
+        case .off:
+            return
+        case .romanized:
+            extrasTask = Task { [weak self] in
+                let out = await Task.detached(priority: .utility) { LyricsRomanizer.romanize(texts) }.value
+                guard let self, !Task.isCancelled, self.trackKey == key else { return }
+                self.extras = out
+            }
+        case .translated:
+            extrasTask = Task { [weak self] in
+                let result = await LyricsTranslator.translate(texts)
+                guard let self, !Task.isCancelled, self.trackKey == key else { return }
+                switch result {
+                case .success(let map): self.extras = map
+                case .failure(let note): self.extrasNote = note.message
+                }
+                DebugLog.write("lyrics translation: \(self.extras.count) lines\(self.extrasNote.map { " (\($0))" } ?? "")")
+            }
+        }
+    }
+}
+
+/// Per-track lyric timing nudges, keyed by NowPlayingInfo.trackKey.
+enum TrackOffsets {
+    private static let key = "lyricsTrackOffsets"
+
+    static func get(_ track: String) -> Double {
+        (UserDefaults.standard.dictionary(forKey: key)?[track] as? Double) ?? 0
+    }
+
+    static func set(_ value: Double, for track: String) {
+        var d = UserDefaults.standard.dictionary(forKey: key) ?? [:]
+        d[track] = value == 0 ? nil : value
+        UserDefaults.standard.set(d, forKey: key)
     }
 }
 
@@ -364,13 +507,45 @@ enum LRCParser {
             let ns = line as NSString
             let matches = tag.matches(in: line, range: NSRange(location: 0, length: ns.length))
             guard let last = matches.last, matches.first?.range.location == 0 else { continue }
-            let text = ns.substring(from: last.range.location + last.range.length).trimmingCharacters(in: .whitespaces)
+            let rest = ns.substring(from: last.range.location + last.range.length)
             for m in matches {
-                let min = Double(ns.substring(with: m.range(at: 1))) ?? 0
-                let sec = Double(ns.substring(with: m.range(at: 2)).replacingOccurrences(of: ":", with: ".")) ?? 0
-                out.append(LyricLine(time: max(0, min * 60 + sec - offset), text: text))
+                let time = max(0, seconds(ns, m) - offset)
+                let (text, words) = parseWords(rest, lineTime: time, offset: offset)
+                // Word times only make sense for a line with one timestamp.
+                out.append(LyricLine(time: time, text: text, words: matches.count == 1 ? words : nil))
             }
         }
         return out.sorted { $0.time < $1.time }
+    }
+
+    private static func seconds(_ ns: NSString, _ m: NSTextCheckingResult) -> Double {
+        let min = Double(ns.substring(with: m.range(at: 1))) ?? 0
+        let sec = Double(ns.substring(with: m.range(at: 2)).replacingOccurrences(of: ":", with: ".")) ?? 0
+        return min * 60 + sec
+    }
+
+    private static let wordTag = try! NSRegularExpression(pattern: #"<(\d{1,3}):(\d{1,2}(?:[.:]\d{1,3})?)>"#)
+
+    /// Splits "<00:12.30>Hello <00:12.80>world" into plain text + word timings. Lines without
+    /// (enough) word tags come back as plain text and nil.
+    static func parseWords(_ rest: String, lineTime: Double, offset: Double) -> (String, [LyricWord]?) {
+        let ns = rest as NSString
+        let matches = wordTag.matches(in: rest, range: NSRange(location: 0, length: ns.length))
+        func collapse(_ s: String) -> String {
+            s.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+        }
+        guard !matches.isEmpty else { return (collapse(rest), nil) }
+        var words: [LyricWord] = []
+        let lead = ns.substring(to: matches[0].range.location)
+        if !collapse(lead).isEmpty { words.append(LyricWord(time: lineTime, text: lead)) }
+        for (k, m) in matches.enumerated() {
+            let start = m.range.location + m.range.length
+            let end = k + 1 < matches.count ? matches[k + 1].range.location : ns.length
+            let text = ns.substring(with: NSRange(location: start, length: end - start))
+            words.append(LyricWord(time: max(0, seconds(ns, m) - offset), text: collapse(text).isEmpty ? "" : text))
+        }
+        let plain = collapse(words.map(\.text).joined())
+        return (plain, words.filter { !$0.text.isEmpty }.count >= 2 ? words : nil)
     }
 }

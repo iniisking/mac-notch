@@ -14,12 +14,13 @@ final class NotchWindowController {
     private var cancellables = Set<AnyCancellable>()
 
     init(screen: NSScreen, store: NotificationStore, settings: SettingsStore, player: NowPlayingService,
-         lyrics: LyricsService) {
+         lyrics: LyricsService, calls: CallMonitor, power: PowerMonitor) {
         self.screen = screen
         viewModel = NotchViewModel(geometry: .detect(for: screen), store: store, settings: settings, player: player,
-                                   lyrics: lyrics)
+                                   lyrics: lyrics, calls: calls, power: power)
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: NotchViewModel.panelSize))
-        let root = NotchRootView(vm: viewModel, store: store, settings: settings, player: player, lyrics: lyrics)
+        let root = NotchRootView(vm: viewModel, store: store, settings: settings, player: player, lyrics: lyrics,
+                                 calls: calls, power: power)
         let host = FirstMouseHostingView(rootView: root)
         host.frame = NSRect(origin: .zero, size: NotchViewModel.panelSize)
         host.autoresizingMask = [.width, .height]
@@ -34,8 +35,26 @@ final class NotchWindowController {
                 // Re-evaluate the hit area once the new size is in effect.
                 DispatchQueue.main.async { self?.updateMouse() }
                 if state == .expanded { self?.panel.makeKey() }
+                if CommandLine.arguments.contains("--snapshot") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self?.snapshot("\(state)") }
+                }
             }
             .store(in: &cancellables)
+    }
+
+    /// Debug (`--snapshot`): renders the panel's own view to
+    /// ~/Library/Application Support/Notch/snapshots/<state>.png (no Screen Recording permission needed).
+    func snapshot(_ name: String) {
+        guard let view = panel.contentView else { return }
+        let size = viewModel.shapeSize
+        let y = view.isFlipped ? 0 : view.bounds.height - size.height - 4
+        let rect = NSRect(x: (view.bounds.width - size.width) / 2, y: y, width: size.width, height: size.height + 4)
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: rect) else { return }
+        view.cacheDisplay(in: rect, to: rep)
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Notch/snapshots", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("\(name).png"))
     }
 
     func close() {
@@ -84,7 +103,7 @@ final class NotchWindowController {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let state = self.viewModel.state
-                if [.expanded, .peek, .musicPeek].contains(state), !self.hitRect.contains(NSEvent.mouseLocation) {
+                if [.expanded, .peek, .musicPeek, .callPeek].contains(state), !self.hitRect.contains(NSEvent.mouseLocation) {
                     self.viewModel.collapse()
                 }
             }

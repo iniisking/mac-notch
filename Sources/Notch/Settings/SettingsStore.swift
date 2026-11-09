@@ -1,6 +1,19 @@
 import Foundation
 import ServiceManagement
 
+/// Second line under lyrics.
+enum LyricsExtra: String, CaseIterable, Identifiable {
+    case off, romanized, translated
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .off: return "Off"
+        case .romanized: return "Romanization"
+        case .translated: return "Translation"
+        }
+    }
+}
+
 @MainActor
 final class SettingsStore: ObservableObject {
     private let defaults = UserDefaults.standard
@@ -35,6 +48,33 @@ final class SettingsStore: ObservableObject {
     @Published var lyricsOffset: Double {
         didSet { defaults.set(lyricsOffset, forKey: "lyricsOffset") }
     }
+    /// Sweep the sung part of the line (word timings when available, otherwise estimated).
+    @Published var lyricsKaraoke: Bool {
+        didSet { defaults.set(lyricsKaraoke, forKey: "lyricsKaraoke") }
+    }
+    @Published var lyricsExtra: LyricsExtra {
+        didSet { defaults.set(lyricsExtra.rawValue, forKey: "lyricsExtra") }
+    }
+    /// Show the romanization / translation in the strip instead of the original line.
+    @Published var lyricsExtraInStrip: Bool {
+        didSet { defaults.set(lyricsExtraInStrip, forKey: "lyricsExtraInStrip") }
+    }
+    /// Brief "Charging 87%" moment when power is connected.
+    @Published var showCharging: Bool {
+        didSet { defaults.set(showCharging, forKey: "showCharging") }
+    }
+    /// Warn at 20% and 10% while on battery.
+    @Published var lowBatteryAlerts: Bool {
+        didSet { defaults.set(lowBatteryAlerts, forKey: "lowBatteryAlerts") }
+    }
+    /// Call timer while a call app uses the microphone.
+    @Published var showCalls: Bool {
+        didSet { defaults.set(showCalls, forKey: "showCalls") }
+    }
+    /// Treat any app using the microphone as a call (not just known call apps and browsers).
+    @Published var callsAnyApp: Bool {
+        didSet { defaults.set(callsAnyApp, forKey: "callsAnyApp") }
+    }
     @Published private(set) var launchAtLogin: Bool
     @Published private(set) var launchAtLoginError: String?
 
@@ -48,6 +88,13 @@ final class SettingsStore: ObservableObject {
         showLyrics = defaults.object(forKey: "showLyrics") as? Bool ?? true
         showLyricStrip = defaults.object(forKey: "showLyricStrip") as? Bool ?? true
         lyricsOffset = defaults.double(forKey: "lyricsOffset")
+        lyricsKaraoke = defaults.object(forKey: "lyricsKaraoke") as? Bool ?? true
+        lyricsExtra = LyricsExtra(rawValue: defaults.string(forKey: "lyricsExtra") ?? "") ?? .off
+        lyricsExtraInStrip = defaults.bool(forKey: "lyricsExtraInStrip")
+        showCharging = defaults.object(forKey: "showCharging") as? Bool ?? true
+        lowBatteryAlerts = defaults.object(forKey: "lowBatteryAlerts") as? Bool ?? true
+        showCalls = defaults.object(forKey: "showCalls") as? Bool ?? true
+        callsAnyApp = defaults.bool(forKey: "callsAnyApp")
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

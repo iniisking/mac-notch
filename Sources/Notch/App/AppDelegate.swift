@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var player = NowPlayingService(settings: settings)
     private let testNotifier = SystemTestNotifier()
     private lazy var lyrics = LyricsService(player: player, settings: settings)
+    private lazy var calls = CallMonitor(settings: settings)
+    private let power = PowerMonitor()
     private let source = DBNotificationSource()
     private var controllers: [CGDirectDisplayID: NotchWindowController] = [:]
     private var statusItem: NSStatusItem?
@@ -49,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         _ = player   // starts the now-playing helper when enabled
         _ = lyrics
+        _ = calls   // starts the microphone watcher when calls are enabled
         source.onEvent = { [weak self] event in self?.store.handle(event) }
         source.start()
 
@@ -114,8 +117,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.player.debugDemo(kind) }
         }
         if args.contains("--media-selftest") { runMediaSelfTest() }
+        // `--demo-call[=zoom|facetime|meet]`, `--demo-charge`, `--demo-lowbattery`: activity UI checks.
+        if let demo = args.first(where: { $0.hasPrefix("--demo-call") }) {
+            let kind = demo.split(separator: "=").dropFirst().first.map(String.init) ?? "zoom"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.calls.debugDemo(kind) }
+        }
+        if args.contains("--demo-charge") || args.contains("--demo-lowbattery") {
+            let low = args.contains("--demo-lowbattery")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.power.debugDemo(low: low) }
+        }
         if args.contains("--peek") {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            // `--peek-delay=<s>`: pin the hover later (e.g. after a demo call or the track auto-peek).
+            let peekDelay = args.first(where: { $0.hasPrefix("--peek-delay=") })
+                .flatMap { Double($0.dropFirst("--peek-delay=".count)) } ?? 2.0
+            DispatchQueue.main.asyncAfter(deadline: .now() + peekDelay) { [weak self] in
                 guard let vm = self?.controllers.values.first?.viewModel else { return }
                 vm.debugPinHover = true
                 vm.setHovering(true)
@@ -128,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         source.stop()
+        calls.restoreMute()
     }
 
     /// Debug: drives the real command path (play/pause, next, previous) and logs whether the
@@ -166,7 +182,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 existing.update(screen: screen)
                 keep[id] = existing
             } else {
-                let c = NotchWindowController(screen: screen, store: store, settings: settings, player: player, lyrics: lyrics)
+                let c = NotchWindowController(screen: screen, store: store, settings: settings, player: player,
+                                              lyrics: lyrics, calls: calls, power: power)
                 c.viewModel.openSettings = { [weak self] in self?.settingsWindow.show() }
                 c.viewModel.openFullDiskAccess = { [weak self] in self?.openFullDiskAccess() }
                 keep[id] = c
