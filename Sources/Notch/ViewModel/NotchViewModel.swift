@@ -11,6 +11,9 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var current: NotchNotification?
     @Published private(set) var pendingCount = 0
     @Published var selectedID: NotchNotification.ID?
+    /// Which page the expanded panel shows: the activity overview or the notification history.
+    enum ExpandedTab: Equatable { case home, notifications }
+    @Published var expandedTab: ExpandedTab = .home
     /// Notification pinned at the top of the music hover panel (just shown, or arrived while it was open).
     @Published private(set) var peekHighlight: NotchNotification?
     private var lastShown: (item: NotchNotification, at: Date)?
@@ -363,17 +366,22 @@ final class NotchViewModel: ObservableObject {
         return l.item
     }
 
-    func expand(selecting id: NotchNotification.ID? = nil) {
+    /// Opens the expanded panel. Clicking a specific notification (or the notch while one is showing)
+    /// lands on the notification history; otherwise it opens on the Home overview.
+    func expand(selecting id: NotchNotification.ID? = nil, tab: ExpandedTab? = nil) {
         compactWork?.cancel()
-        selectedID = id ?? peekHighlight?.id ?? current?.id ?? store.visibleHistory.first?.id
+        let showingNotification = (state == .compact || state == .peek) ? current?.id : nil
+        let focused = id ?? peekHighlight?.id ?? showingNotification
+        selectedID = focused ?? store.visibleHistory.first?.id
+        expandedTab = tab ?? (focused != nil ? .notifications : .home)
         peekHighlight = nil
         state = .expanded
     }
 
-    /// Opens the expanded panel from outside (status menu).
+    /// Opens the notification history from outside (status menu).
     func showExpanded() {
         current = current ?? store.visibleHistory.first
-        expand()
+        expand(tab: .notifications)
     }
 
     /// Double-click: open the notification's conversation (or app) and fold the notch away.

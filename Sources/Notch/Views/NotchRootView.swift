@@ -32,6 +32,7 @@ struct NotchRootView: View {
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: calls.pastHour)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.peekHighlight?.id)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: store.visibleHistory.count)
+        .animation(.easeInOut(duration: 0.2), value: vm.expandedTab)
     }
 
     @ViewBuilder private var content: some View {
@@ -77,7 +78,8 @@ struct NotchRootView: View {
                 .onTapGesture(count: 2) { if let n = vm.current { vm.open(n) } }
                 .onTapGesture { vm.expand() }
         case .expanded:
-            ExpandedView(vm: vm, store: store, settings: settings, player: player)
+            ExpandedView(vm: vm, store: store, settings: settings, player: player, lyrics: lyrics,
+                         calls: calls, power: power)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
         }
