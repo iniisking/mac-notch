@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import ServiceManagement
 
 /// Second line under lyrics.
@@ -75,6 +76,43 @@ final class SettingsStore: ObservableObject {
     @Published var callsAnyApp: Bool {
         didSet { defaults.set(callsAnyApp, forKey: "callsAnyApp") }
     }
+    /// AirPods / headphones connecting, with battery.
+    @Published var showAudioDevices: Bool {
+        didSet { defaults.set(showAudioDevices, forKey: "showAudioDevices") }
+    }
+    /// "Copied from your device" when Universal Clipboard brings something over.
+    @Published var showUniversalClipboard: Bool {
+        didSet { defaults.set(showUniversalClipboard, forKey: "showUniversalClipboard") }
+    }
+    /// Files received over AirDrop.
+    @Published var showAirDrop: Bool {
+        didSet { defaults.set(showAirDrop, forKey: "showAirDrop") }
+    }
+    /// Dragging files onto the notch offers to AirDrop them.
+    @Published var airDropDropZone: Bool {
+        didSet { defaults.set(airDropDropZone, forKey: "airDropDropZone") }
+    }
+    /// Focus changes (synced from iPhone / iPad).
+    @Published var showFocus: Bool {
+        didSet { defaults.set(showFocus, forKey: "showFocus") }
+    }
+    /// Personal Hotspot connecting / disconnecting.
+    @Published var showHotspot: Bool {
+        didSet { defaults.set(showHotspot, forKey: "showHotspot") }
+    }
+    /// Next calendar event and a heads-up before meetings with a join link.
+    @Published var showCalendar: Bool {
+        didSet { defaults.set(showCalendar, forKey: "showCalendar") }
+    }
+    /// Local HTTP endpoint for iPhone Shortcuts automations.
+    @Published var bridgeEnabled: Bool {
+        didSet { defaults.set(bridgeEnabled, forKey: "bridgeEnabled") }
+    }
+    @Published private(set) var bridgeToken: String
+    /// Shortcuts shown as buttons on the Devices page.
+    @Published var pinnedShortcuts: [String] {
+        didSet { defaults.set(pinnedShortcuts, forKey: "pinnedShortcuts") }
+    }
     @Published private(set) var launchAtLogin: Bool
     @Published private(set) var launchAtLoginError: String?
 
@@ -95,7 +133,30 @@ final class SettingsStore: ObservableObject {
         lowBatteryAlerts = defaults.object(forKey: "lowBatteryAlerts") as? Bool ?? true
         showCalls = defaults.object(forKey: "showCalls") as? Bool ?? true
         callsAnyApp = defaults.bool(forKey: "callsAnyApp")
+        showAudioDevices = defaults.object(forKey: "showAudioDevices") as? Bool ?? true
+        showUniversalClipboard = defaults.object(forKey: "showUniversalClipboard") as? Bool ?? true
+        showAirDrop = defaults.object(forKey: "showAirDrop") as? Bool ?? true
+        airDropDropZone = defaults.object(forKey: "airDropDropZone") as? Bool ?? true
+        showFocus = defaults.object(forKey: "showFocus") as? Bool ?? true
+        showHotspot = defaults.object(forKey: "showHotspot") as? Bool ?? true
+        showCalendar = defaults.object(forKey: "showCalendar") as? Bool ?? true
+        bridgeEnabled = defaults.bool(forKey: "bridgeEnabled")
+        let token = defaults.string(forKey: "bridgeToken").flatMap { $0.isEmpty ? nil : $0 } ?? Self.makeToken()
+        defaults.set(token, forKey: "bridgeToken")
+        bridgeToken = token
+        pinnedShortcuts = defaults.stringArray(forKey: "pinnedShortcuts") ?? []
         launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    func regenerateBridgeToken() {
+        bridgeToken = Self.makeToken()
+        defaults.set(bridgeToken, forKey: "bridgeToken")
+    }
+
+    private static func makeToken() -> String {
+        var bytes = [UInt8](repeating: 0, count: 12)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
     func isMuted(_ bundleID: String) -> Bool { mutedApps.contains(bundleID.lowercased()) }

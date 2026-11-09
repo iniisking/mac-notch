@@ -61,6 +61,36 @@ own database instead of mirroring on-screen banners.
   48m" (or "Fully charged" / "charging paused") in the strip. On battery, 20% and 10% show a red
   "Low battery · 34m left" moment. It uses IOKit power-source notifications (no permission). If a
   notification is on screen it waits, and it is dropped if it's more than 20 s old.
+- **Devices & Continuity**: brief "moments" in the notch (one glyph per wing, "Title - detail" in the
+  strip), queued behind notifications like the battery moment. Hovering holds a moment, and clicking runs
+  its action (or opens the Devices page):
+  - **AirPods & headphones**: connecting shows the device with left / right / case battery
+    (IOBluetooth connect notifications; per-bud levels come from IOBluetoothDevice's undocumented
+    `batteryPercentLeft/Right/Case` selectors). Needs Bluetooth permission.
+  - **Universal Clipboard**: copying on an iPhone / iPad shows "Copied from your device" with the text,
+    link or image. Clicking a link opens it. (The pasteboard carries `com.apple.is-remote-clipboard`.)
+  - **AirDrop in**: new files in ~/Downloads whose quarantine names `sharingd` show a Quick Look thumbnail.
+    Clicking shows them in Finder.
+  - **AirDrop out**: drag files from anywhere onto the notch and a drop zone opens. Dropping opens the
+    system AirDrop picker.
+  - **Focus**: turning a Focus on or off on any of your devices (iCloud syncs it) shows a moment. Read from
+    `~/Library/DoNotDisturb/DB` (Full Disk Access). Scheduled Focus without a manual toggle isn't detected.
+  - **Personal Hotspot**: joining a hotspot (Wi-Fi marked expensive) shows a moment.
+  - **Up next**: the next timed event from your calendars appears on Home and Devices, with **Join** for
+    Meet / Zoom / Teams / Webex / FaceTime links. A minute before such a meeting starts, a moment appears
+    that joins it when clicked. Needs Calendar access.
+  - **Continuity Camera**: the call card says "iPhone camera" when the camera in use is your iPhone.
+  - **Messages reply**: Messages notifications (iMessage / SMS relayed from the iPhone) get a reply field in
+    the expanded panel. It sends through Messages' AppleScript, so macOS asks once to let Notch control Messages.
+    Short-code senders (banks, carriers) can't be replied to and get no field.
+  - **iPhone bridge** (off by default, Settings › iPhone bridge): a token-protected HTTP endpoint on port
+    7766 (Bonjour `_notch._tcp`). iPhone Shortcuts automations (charger connected / disconnected, battery
+    below 20%) POST the phone's battery to it. That shows charging / full / low moments and the iPhone on the
+    Devices page. `/v1/event` takes any `title` / `body` / `symbol` / `url`, for example a timer or arriving home.
+    Settings has copyable URLs and the recipe. (macOS has no public or unentitled API for the iPhone battery
+    the Batteries widget shows; BatteryCenter returns nothing to third-party apps.)
+  - **Quick actions**: Devices page buttons for iPhone Mirroring and any Shortcuts you pin in Settings.
+  Each feature has its own toggle in Settings › Devices & Continuity.
 - **Menu-bar bell** (no Dock icon): Show Notifications, Send Test Notification, Settings, Quit.
 - **Settings**: per-app mute list, display duration, launch at login, show on external
   displays, test notification, source status, clear history, lyrics (karaoke, second line), and
@@ -174,6 +204,11 @@ sender is semibold and the preview dimmer; long text scrolls.
 - `--demo-call[=zoom|facetime|meet]` fakes a call (`meet` started over an hour ago, for the wide
   timer); `--demo-charge` / `--demo-lowbattery` fake the battery moments. `--peek-delay=<s>` delays
   `--peek` (e.g. `--demo-call --peek --peek-delay=6` for the call card).
+- `--demo-moment=audio|clipboard|airdrop|focus|hotspot|calendar|iphone|event` fakes a device moment
+  (`--demo-delay=<s>` to time it); `--demo-drop` shows the AirDrop drop zone; `--expand-tab=home|devices|notifications`
+  opens the expanded panel on that page.
+- The bridge can be checked from the Mac itself:
+  `curl "http://127.0.0.1:7766/v1/device?token=$(defaults read com.theajstars.notch bridgeToken)" -d 'battery=54&charging=1'`.
 - `--snapshot` renders the notch to `~/Library/Application Support/Notch/snapshots/<state>.png`
   1.2 s after every state change. It needs no Screen Recording permission, so it works from scripts and
   agents.
@@ -197,6 +232,8 @@ Sources/
     NowPlaying/                   NowPlayingService (helper process + Spotify fallback), SourceClassifier, models
     Lyrics/                       LyricsService (LRCLIB, sync clock, karaoke), LyricsExtras (romanize / translate)
     Activities/                   CallMonitor (CoreAudio mic users, camera, input mute), PowerMonitor (IOKit)
+    Continuity/                   ContinuityHub (monitors → Moments), AudioDeviceMonitor, ClipboardMonitor, AirDropMonitor,
+                                  FocusMonitor, HotspotMonitor, CalendarMonitor, DeviceBridge (HTTP), QuickActions
   NotchMedia/                     libNotchMedia.dylib (MediaRemote via perl) + notch-media.pl
   notch-dbcheck/main.swift        CLI
 ```

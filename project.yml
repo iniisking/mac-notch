@@ -32,6 +32,8 @@ targets:
       path: Config/Notch.entitlements
       properties:
         com.apple.security.automation.apple-events: true
+        # Hardened runtime: EventKit (Up next) needs this to read calendars.
+        com.apple.security.personal-information.calendars: true
     info:
       path: Config/Notch-Info.plist
       properties:
@@ -44,7 +46,12 @@ targets:
         LSApplicationCategoryType: public.app-category.utilities
         NSPrincipalClass: NSApplication
         NSHumanReadableCopyright: "Personal use."
-        NSAppleEventsUsageDescription: "Notch reads your browser's tab addresses to tell YouTube from YouTube Music."
+        NSAppleEventsUsageDescription: "Notch reads your browser's tab addresses to tell YouTube from YouTube Music, and sends your Messages replies."
+        NSBluetoothAlwaysUsageDescription: "Notch shows your AirPods and headphones, with battery levels, when they connect."
+        NSCalendarsFullAccessUsageDescription: "Notch shows your next event and a Join button for meetings."
+        NSCalendarsUsageDescription: "Notch shows your next event and a Join button for meetings."
+        NSLocalNetworkUsageDescription: "Notch receives battery and status updates from your iPhone's Shortcuts over the local network."
+        NSBonjourServices: ["_notch._tcp"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.theajstars.notch

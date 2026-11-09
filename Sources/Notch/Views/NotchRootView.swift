@@ -27,6 +27,7 @@ struct NotchRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
         .animation(.spring(response: 0.42, dampingFraction: 0.8), value: vm.state)
+        .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.moment?.id)
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: vm.current?.id)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: vm.showsLyricStrip)
         .animation(.spring(response: 0.38, dampingFraction: 0.85), value: calls.pastHour)
@@ -59,6 +60,17 @@ struct NotchRootView: View {
                     .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
                                             removal: .opacity.animation(.easeIn(duration: 0.1))))
             }
+        case .moment:
+            if let m = vm.moment {
+                CompactMomentView(vm: vm, moment: m)
+                    .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
+                                            removal: .opacity.animation(.easeIn(duration: 0.1))))
+                    .onTapGesture { vm.activateMoment() }
+            }
+        case .drop:
+            DropZoneView(vm: vm)
+                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.1)),
+                                        removal: .opacity.animation(.easeIn(duration: 0.1))))
         case .musicPeek:
             MusicPeekView(vm: vm, player: player, lyrics: lyrics, store: store)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),

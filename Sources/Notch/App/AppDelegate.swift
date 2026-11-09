@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var lyrics = LyricsService(player: player, settings: settings)
     private lazy var calls = CallMonitor(settings: settings)
     private let power = PowerMonitor()
+    private lazy var hub = ContinuityHub(settings: settings)
     private let source = DBNotificationSource()
     private var controllers: [CGDirectDisplayID: NotchWindowController] = [:]
     private var statusItem: NSStatusItem?
@@ -18,7 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private lazy var settingsWindow = SettingsWindowController { [unowned self] in
         SettingsView(settings: self.settings, store: self.store, player: self.player,
-                     notifier: self.testNotifier,
+                     notifier: self.testNotifier, bridge: self.hub.bridge,
                      openFullDiskAccess: { [unowned self] in self.openFullDiskAccess() })
     }
     private lazy var onboarding = OnboardingWindowController(
@@ -52,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = player   // starts the now-playing helper when enabled
         _ = lyrics
         _ = calls   // starts the microphone watcher when calls are enabled
+        _ = hub     // AirPods, Universal Clipboard, AirDrop, Focus, hotspot, calendar, iPhone bridge
         source.onEvent = { [weak self] event in self?.store.handle(event) }
         source.start()
 
@@ -126,6 +128,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let low = args.contains("--demo-lowbattery")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.power.debugDemo(low: low) }
         }
+        // `--demo-moment=audio|clipboard|airdrop|focus|hotspot|calendar|iphone|event`: device moment UI checks.
+        if let demo = args.first(where: { $0.hasPrefix("--demo-moment") }) {
+            let kind = demo.split(separator: "=").dropFirst().first.map(String.init) ?? "audio"
+            let delay = args.first(where: { $0.hasPrefix("--demo-delay=") })
+                .flatMap { Double($0.dropFirst("--demo-delay=".count)) } ?? 1.5
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.hub.debugDemo(kind) }
+        }
+        // `--demo-drop`: show the AirDrop drop zone as if files were dragged onto the notch.
+        if args.contains("--demo-drop") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let vm = self?.controllers.values.first?.viewModel else { return }
+                vm.setDraggingFiles(true)
+                vm.debugPinHover = true
+                vm.setHovering(true)
+            }
+        }
         if args.contains("--peek") {
             // `--peek-delay=<s>`: pin the hover later (e.g. after a demo call or the track auto-peek).
             let peekDelay = args.first(where: { $0.hasPrefix("--peek-delay=") })
@@ -138,6 +156,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if args.contains("--expand") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.showHistory() }
+        }
+        // `--expand-tab=home|devices|notifications`: open the expanded panel on that page.
+        if let arg = args.first(where: { $0.hasPrefix("--expand-tab=") }) {
+            let tab: NotchViewModel.ExpandedTab = switch String(arg.dropFirst("--expand-tab=".count)) {
+            case "devices": .devices
+            case "notifications": .notifications
+            default: .home
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                guard let vm = self?.controllers.values.first?.viewModel else { return }
+                vm.debugPinHover = true
+                vm.expand(tab: tab)
+            }
         }
     }
 
@@ -183,7 +214,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 keep[id] = existing
             } else {
                 let c = NotchWindowController(screen: screen, store: store, settings: settings, player: player,
-                                              lyrics: lyrics, calls: calls, power: power)
+                                              lyrics: lyrics, calls: calls, power: power, hub: hub)
                 c.viewModel.openSettings = { [weak self] in self?.settingsWindow.show() }
                 c.viewModel.openFullDiskAccess = { [weak self] in self?.openFullDiskAccess() }
                 keep[id] = c

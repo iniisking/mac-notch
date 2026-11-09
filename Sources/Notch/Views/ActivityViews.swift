@@ -82,8 +82,8 @@ struct CallPeekView: View {
                             indicator(calls.micMuted == true ? "mic.slash.fill" : "mic.fill",
                                       calls.micMuted == true ? "Muted" : "Mic on",
                                       calls.micMuted == true ? lowRed : .white.opacity(0.6))
-                            indicator(calls.cameraOn ? "video.fill" : "video.slash.fill",
-                                      calls.cameraOn ? "Camera on" : "Camera off",
+                            indicator(calls.cameraIsIPhone ? "iphone.gen3" : calls.cameraOn ? "video.fill" : "video.slash.fill",
+                                      calls.cameraIsIPhone ? "iPhone camera" : calls.cameraOn ? "Camera on" : "Camera off",
                                       calls.cameraOn ? callGreen : .white.opacity(0.45))
                         }
                     }

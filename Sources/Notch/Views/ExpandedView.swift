@@ -47,8 +47,9 @@ struct ExpandedView: View {
             // Top band beside the camera housing.
             HStack(spacing: 0) {
                 HStack(spacing: 4) {
-                    tabButton("Home", tab: .home)
-                    tabButton("Notifications", tab: .notifications, count: store.visibleHistory.count)
+                    tabButton("Home", symbol: "house.fill", tab: .home)
+                    tabButton("Devices", symbol: "laptopcomputer.and.iphone", tab: .devices)
+                    tabButton("Notifications", symbol: "bell.fill", tab: .notifications, count: store.visibleHistory.count)
                     Spacer(minLength: 0)
                 }
                 .frame(width: sideWidth)
@@ -77,6 +78,7 @@ struct ExpandedView: View {
             Group {
                 switch vm.expandedTab {
                 case .home: home
+                case .devices: DevicesPage(vm: vm, settings: settings, calls: calls)
                 case .notifications: notifications
                 }
             }
@@ -87,11 +89,15 @@ struct ExpandedView: View {
         .padding(.bottom, 16)
     }
 
-    private func tabButton(_ title: String, tab: NotchViewModel.ExpandedTab, count: Int? = nil) -> some View {
+    /// Icon tabs; the selected one also shows its title (three titles don't fit beside the camera).
+    private func tabButton(_ title: String, symbol: String, tab: NotchViewModel.ExpandedTab, count: Int? = nil) -> some View {
         let selected = vm.expandedTab == tab
         return Button { vm.expandedTab = tab } label: {
             HStack(spacing: 5) {
-                Text(title).font(.system(size: 11.5, weight: .semibold))
+                Image(systemName: symbol).font(.system(size: 10.5, weight: .semibold))
+                if selected {
+                    Text(title).font(.system(size: 11.5, weight: .semibold)).lineLimit(1).fixedSize()
+                }
                 if let count, count > 0 {
                     Text("\(count)")
                         .font(.system(size: 9.5, weight: .bold))
@@ -105,6 +111,7 @@ struct ExpandedView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .help(title)
     }
 
     // MARK: - Home
@@ -119,6 +126,10 @@ struct ExpandedView: View {
                     mediaCard
                 } else {
                     clockCard
+                }
+                // Next meeting (from the calendars your iPhone syncs), unless the media card needs the room.
+                if settings.showCalendar, !(hasActiveMedia && (showsLyrics || activeCall != nil)) {
+                    UpNextCard(calendar: vm.hub.calendar, compact: true)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -165,8 +176,8 @@ struct ExpandedView: View {
                         Label(calls.micMuted == true ? "Muted" : "Mic on",
                               systemImage: calls.micMuted == true ? "mic.slash.fill" : "mic.fill")
                             .foregroundStyle(calls.micMuted == true ? Self.lowRed : .white.opacity(0.6))
-                        Label(calls.cameraOn ? "Camera on" : "Camera off",
-                              systemImage: calls.cameraOn ? "video.fill" : "video.slash.fill")
+                        Label(calls.cameraIsIPhone ? "iPhone camera" : calls.cameraOn ? "Camera on" : "Camera off",
+                              systemImage: calls.cameraIsIPhone ? "iphone.gen3" : calls.cameraOn ? "video.fill" : "video.slash.fill")
                             .foregroundStyle(calls.cameraOn ? Self.callGreen : .white.opacity(0.45))
                     }
                     .font(.system(size: 10.5, weight: .medium))
@@ -411,6 +422,10 @@ struct ExpandedView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: .infinity)
+
+                if let chat = QuickActions.replyTarget(for: n) {
+                    MessageReplyField(chat: chat)
+                }
 
                 HStack(spacing: 8) {
                     let exact = NotificationOpener.deepLink(for: n) != nil

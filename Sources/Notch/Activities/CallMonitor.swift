@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Combine
 import CoreAudio
 import CoreMediaIO
@@ -22,6 +23,8 @@ struct ActiveCall: Equatable {
 final class CallMonitor: ObservableObject {
     @Published private(set) var call: ActiveCall?
     @Published private(set) var cameraOn = false
+    /// The camera in use is an iPhone (Continuity Camera).
+    @Published private(set) var cameraIsIPhone = false
     /// nil when the current input device can't be muted.
     @Published private(set) var micMuted: Bool?
     /// Flips once the call passes an hour, so the notch can widen for "1:02:33".
@@ -107,13 +110,15 @@ final class CallMonitor: ObservableObject {
                 restoreMute()
             }
         }
-        if call != nil { refreshDeviceState() } else if cameraOn { cameraOn = false }
+        if call != nil { refreshDeviceState() } else if cameraOn || cameraIsIPhone { cameraOn = false; cameraIsIPhone = false }
         pastHour = call.map { now.timeIntervalSince($0.started) >= 3600 } ?? false
     }
 
     private func refreshDeviceState() {
         let cam = Self.cameraRunning()
         if cam != cameraOn { cameraOn = cam }
+        let iphone = cam && Self.continuityCameraInUse()
+        if iphone != cameraIsIPhone { cameraIsIPhone = iphone }
         let muted = Self.inputMuted()
         if muted != micMuted { micMuted = muted }
     }
@@ -328,6 +333,13 @@ final class CallMonitor: ObservableObject {
             }
         }
         return false
+    }
+
+    /// Continuity Camera devices (macOS 14+) report whether another app is capturing from them.
+    /// Enumerating devices doesn't need camera permission.
+    private static func continuityCameraInUse() -> Bool {
+        let session = AVCaptureDevice.DiscoverySession(deviceTypes: [.continuityCamera], mediaType: .video, position: .unspecified)
+        return session.devices.contains { $0.isInUseByAnotherApplication }
     }
 
     // MARK: - Web meetings

@@ -6,8 +6,12 @@ struct SettingsView: View {
     @ObservedObject var store: NotificationStore
     @ObservedObject var player: NowPlayingService
     @ObservedObject var notifier: SystemTestNotifier
+    @ObservedObject var bridge: DeviceBridge
     let openFullDiskAccess: () -> Void
     @State private var newBundleID = ""
+    @State private var allShortcuts: [String] = []
+    @State private var shortcutToPin = ""
+    @State private var copiedBridge = false
 
     private var appList: [String] {
         let known = Set(store.knownBundleIDs.map { $0.lowercased() })
@@ -91,6 +95,82 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section {
+                Toggle("AirPods & headphones (battery on connect)", isOn: $settings.showAudioDevices)
+                Toggle("Universal Clipboard (copied on iPhone / iPad)", isOn: $settings.showUniversalClipboard)
+                Toggle("AirDrop received", isOn: $settings.showAirDrop)
+                Toggle("Drag files onto the notch to AirDrop them", isOn: $settings.airDropDropZone)
+                Toggle("Focus changes (synced from your devices)", isOn: $settings.showFocus)
+                Toggle("Personal Hotspot", isOn: $settings.showHotspot)
+                Toggle("Up next: calendar + join meeting heads-up", isOn: $settings.showCalendar)
+            } header: {
+                Text("Devices & Continuity")
+            } footer: {
+                Text("Headphones need Bluetooth permission and Up next needs Calendar access (macOS asks once). Focus and AirDrop use the Full Disk Access Notch already has. Replying to Messages from the expanded panel asks once to control Messages. Click a moment in the notch to act on it: open the link, show the file, join the meeting.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Accept updates from iPhone Shortcuts", isOn: $settings.bridgeEnabled)
+                if settings.bridgeEnabled {
+                    LabeledContent("Status", value: bridge.status)
+                    if let last = bridge.lastRequest {
+                        LabeledContent("Last update", value: last.formatted(date: .omitted, time: .shortened))
+                    }
+                    LabeledContent("Battery URL") {
+                        Text(deviceURL).font(.caption.monospaced()).textSelection(.enabled).lineLimit(2)
+                    }
+                    HStack {
+                        Button(copiedBridge ? "Copied" : "Copy battery URL") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(deviceURL, forType: .string)
+                            copiedBridge = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copiedBridge = false }
+                        }
+                        Button("Copy message URL") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(eventURL, forType: .string)
+                        }
+                        Spacer()
+                        Button("New token") { settings.regenerateBridgeToken() }
+                    }
+                }
+            } header: {
+                Text("iPhone bridge")
+            } footer: {
+                Text("""
+                On the iPhone: Shortcuts › Automation › New. Make three automations set to Run Immediately: "Charger › Is Connected", "Charger › Is Disconnected", and "Battery Level › Falls Below 20%". Each runs "Get Battery Level", then "Get Contents of URL" with the battery URL, Method POST, Request Body JSON: name = iPhone, battery = Battery Level, charging = true (connected) or false (the other two). Use the message URL with title / body / symbol fields for anything else, such as a timer or arriving home. Both devices must be on the same network, and macOS may ask to allow incoming connections.
+                """)
+                .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section {
+                ForEach(settings.pinnedShortcuts, id: \.self) { name in
+                    HStack {
+                        Label(name, systemImage: "square.2.layers.3d")
+                        Spacer()
+                        Button("Remove") { settings.pinnedShortcuts.removeAll { $0 == name } }
+                    }
+                }
+                HStack {
+                    Picker("Pin a Shortcut", selection: $shortcutToPin) {
+                        Text("Choose…").tag("")
+                        ForEach(allShortcuts.filter { !settings.pinnedShortcuts.contains($0) }, id: \.self) { Text($0).tag($0) }
+                    }
+                    Button("Pin") {
+                        settings.pinnedShortcuts.append(shortcutToPin)
+                        shortcutToPin = ""
+                    }
+                    .disabled(shortcutToPin.isEmpty)
+                }
+            } header: {
+                Text("Quick actions")
+            } footer: {
+                Text("Pinned Shortcuts appear as buttons on the notch's Devices page, next to iPhone Mirroring. Shortcuts synced from your iPhone through iCloud are listed too.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .onAppear { QuickActions.listShortcuts { allShortcuts = $0 } }
+
             Section("Display") {
                 LabeledContent("Show for") {
                     HStack {
@@ -148,6 +228,14 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480, height: 820)
+    }
+
+    private var deviceURL: String {
+        "\(bridge.baseURL)/v1/device?token=\(settings.bridgeToken)"
+    }
+
+    private var eventURL: String {
+        "\(bridge.baseURL)/v1/event?token=\(settings.bridgeToken)"
     }
 
     private var statusColor: Color {

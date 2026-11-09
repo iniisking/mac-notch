@@ -27,9 +27,21 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Notch reads your browser's tab addresses to tell YouTube from YouTube Music.</string>
+	<string>Notch reads your browser's tab addresses to tell YouTube from YouTube Music, and sends your Messages replies.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Notch shows your AirPods and headphones, with battery levels, when they connect.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_notch._tcp</string>
+	</array>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Notch shows your next event and a Join button for meetings.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Notch shows your next event and a Join button for meetings.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Personal use.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Notch receives battery and status updates from your iPhone's Shortcuts over the local network.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

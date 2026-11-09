@@ -11,13 +11,16 @@ final class NotchWindowController {
     private(set) var screen: NSScreen
     private let panel: NotchPanel
     private var monitors: [Any] = []
+    /// While the left button is held: watches for a file drag (the drag pasteboard changes).
+    private var dragTimer: Timer?
+    private var dragBaseline = 0
     private var cancellables = Set<AnyCancellable>()
 
     init(screen: NSScreen, store: NotificationStore, settings: SettingsStore, player: NowPlayingService,
-         lyrics: LyricsService, calls: CallMonitor, power: PowerMonitor) {
+         lyrics: LyricsService, calls: CallMonitor, power: PowerMonitor, hub: ContinuityHub) {
         self.screen = screen
         viewModel = NotchViewModel(geometry: .detect(for: screen), store: store, settings: settings, player: player,
-                                   lyrics: lyrics, calls: calls, power: power)
+                                   lyrics: lyrics, calls: calls, power: power, hub: hub)
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: NotchViewModel.panelSize))
         let root = NotchRootView(vm: viewModel, store: store, settings: settings, player: player, lyrics: lyrics,
                                  calls: calls, power: power)
@@ -59,6 +62,8 @@ final class NotchWindowController {
 
     func close() {
         monitors.forEach { NSEvent.removeMonitor($0) }
+        dragTimer?.invalidate()
+        dragTimer = nil
         monitors.removeAll()
         cancellables.removeAll()
         panel.orderOut(nil)
@@ -103,11 +108,42 @@ final class NotchWindowController {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let state = self.viewModel.state
-                if [.expanded, .peek, .musicPeek, .callPeek].contains(state), !self.hitRect.contains(NSEvent.mouseLocation) {
+                if [.expanded, .peek, .musicPeek, .callPeek, .drop].contains(state), !self.hitRect.contains(NSEvent.mouseLocation) {
                     self.viewModel.collapse()
                 }
             }
         }) { monitors.append(c) }
+        // File drags from Finder / other apps: offer the AirDrop drop zone when they reach the notch.
+        if let d = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.beginWatchingDrag() }
+        }) { monitors.append(d) }
+    }
+
+    private func beginWatchingDrag() {
+        guard viewModel.settings.airDropDropZone else { return }
+        dragBaseline = NSPasteboard(name: .drag).changeCount
+        dragTimer?.invalidate()
+        let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollDrag() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        dragTimer = t
+    }
+
+    private func pollDrag() {
+        guard NSEvent.pressedMouseButtons & 1 != 0 else {
+            dragTimer?.invalidate()
+            dragTimer = nil
+            viewModel.setDraggingFiles(false)
+            return
+        }
+        let pb = NSPasteboard(name: .drag)
+        if !viewModel.isDraggingFiles, pb.changeCount != dragBaseline,
+           pb.types?.contains(.fileURL) == true {
+            viewModel.setDraggingFiles(true)
+        }
+        // Global mouse-moved events can stall during a drag session; track the pointer here too.
+        if viewModel.isDraggingFiles { updateMouse() }
     }
 
     private func updateMouse() {
