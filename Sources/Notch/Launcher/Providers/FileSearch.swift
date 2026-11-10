@@ -53,7 +53,8 @@ final class FileSearch: ObservableObject {
             .filter { !$0.isEmpty }
         guard !words.isEmpty else { results = []; return }
         let parts = words.map { NSPredicate(format: "%K LIKE[cd] %@", NSMetadataItemFSNameKey, "*\($0)*") }
-        q.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: parts)
+        // NSMetadataQuery also throws on an AND compound with exactly one subpredicate.
+        q.predicate = parts.count == 1 ? parts[0] : NSCompoundPredicate(andPredicateWithSubpredicates: parts)
         q.searchScopes = [NSMetadataQueryUserHomeScope]
         q.sortDescriptors = [NSSortDescriptor(key: NSMetadataItemLastUsedDateKey, ascending: false),
                              NSSortDescriptor(key: NSMetadataItemFSContentChangeDateKey, ascending: false)]
