@@ -46,10 +46,12 @@ targets:
         LSApplicationCategoryType: public.app-category.utilities
         NSPrincipalClass: NSApplication
         NSHumanReadableCopyright: "Personal use."
-        NSAppleEventsUsageDescription: "Notch reads your browser's tab addresses to tell YouTube from YouTube Music, and sends your Messages replies."
+        NSAppleEventsUsageDescription: "Notch reads your browser's tab addresses to tell YouTube from YouTube Music, sends your Messages replies, and runs launcher commands (dark mode, empty Trash, eject disks)."
         NSBluetoothAlwaysUsageDescription: "Notch shows your AirPods and headphones, with battery levels, when they connect."
         NSCalendarsFullAccessUsageDescription: "Notch shows your next event and a Join button for meetings."
         NSCalendarsUsageDescription: "Notch shows your next event and a Join button for meetings."
+        NSRemindersFullAccessUsageDescription: "The launcher adds reminders you type (\"remind call mum tomorrow 6pm\")."
+        NSRemindersUsageDescription: "The launcher adds reminders you type (\"remind call mum tomorrow 6pm\")."
         NSLocalNetworkUsageDescription: "Notch receives battery and status updates from your iPhone's Shortcuts over the local network."
         NSBonjourServices: ["_notch._tcp"]
     settings:

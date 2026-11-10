@@ -46,9 +46,12 @@ struct ExpandedView: View {
         VStack(spacing: 0) {
             // Top band beside the camera housing.
             HStack(spacing: 0) {
-                HStack(spacing: 4) {
+                HStack(spacing: 2) {
                     tabButton("Home", symbol: "house.fill", tab: .home)
                     tabButton("Devices", symbol: "laptopcomputer.and.iphone", tab: .devices)
+                    if vm.launcher.settings.shelfEnabled || !vm.launcher.shelf.items.isEmpty {
+                        tabButton("Shelf", symbol: "tray.full.fill", tab: .shelf)
+                    }
                     tabButton("Notifications", symbol: "bell.fill", tab: .notifications, count: store.visibleHistory.count)
                     Spacer(minLength: 0)
                 }
@@ -79,6 +82,7 @@ struct ExpandedView: View {
                 switch vm.expandedTab {
                 case .home: home
                 case .devices: DevicesPage(vm: vm, settings: settings, calls: calls)
+                case .shelf: ShelfPage(vm: vm, shelf: vm.launcher.shelf)
                 case .notifications: notifications
                 }
             }
@@ -99,13 +103,15 @@ struct ExpandedView: View {
                     Text(title).font(.system(size: 11.5, weight: .semibold)).lineLimit(1).fixedSize()
                 }
                 if let count, count > 0 {
-                    Text("\(count)")
+                    Text(count > 99 ? "99+" : "\(count)")
                         .font(.system(size: 9.5, weight: .bold))
+                        .lineLimit(1)
+                        .fixedSize()
                         .padding(.horizontal, 4.5).padding(.vertical, 0.5)
                         .background(Capsule().fill(.white.opacity(0.18)))
                 }
             }
-            .padding(.horizontal, 9).padding(.vertical, 4)
+            .padding(.horizontal, 8).padding(.vertical, 4)
             .background(Capsule().fill(.white.opacity(selected ? 0.16 : 0)))
             .foregroundStyle(.white.opacity(selected ? 1 : 0.55))
             .contentShape(Capsule())

@@ -11,16 +11,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private lazy var calls = CallMonitor(settings: settings)
     private let power = PowerMonitor()
     private lazy var hub = ContinuityHub(settings: settings)
+    private lazy var launcher = LauncherServices(hub: hub)
     private let source = DBNotificationSource()
     private var controllers: [CGDirectDisplayID: NotchWindowController] = [:]
     private var statusItem: NSStatusItem?
     private var cancellables = Set<AnyCancellable>()
     private var onboardingShown = false
 
-    private lazy var settingsWindow = SettingsWindowController { [unowned self] in
-        SettingsView(settings: self.settings, store: self.store, player: self.player,
-                     notifier: self.testNotifier, bridge: self.hub.bridge,
-                     openFullDiskAccess: { [unowned self] in self.openFullDiskAccess() })
+    private let settingsRouter = SettingsRouter()
+    private lazy var settingsWindow = SettingsWindowController(router: settingsRouter) { [unowned self] in
+        SettingsRoot(
+            router: self.settingsRouter,
+            general: SettingsView(settings: self.settings, store: self.store, player: self.player,
+                                  notifier: self.testNotifier, bridge: self.hub.bridge,
+                                  openFullDiskAccess: { [unowned self] in self.openFullDiskAccess() }),
+            launcher: LauncherSettingsView(services: self.launcher, settings: self.launcher.settings,
+                                           snippets: self.launcher.snippets, quicklinks: self.launcher.quicklinks,
+                                           clipboard: self.launcher.clipboard),
+            shortcuts: CommandShortcutsView(services: self.launcher, settings: self.launcher.settings))
     }
     private lazy var onboarding = OnboardingWindowController(
         store: store,
@@ -54,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = lyrics
         _ = calls   // starts the microphone watcher when calls are enabled
         _ = hub     // AirPods, Universal Clipboard, AirDrop, Focus, hotspot, calendar, iPhone bridge
+        setupLauncher()
         source.onEvent = { [weak self] event in self?.store.handle(event) }
         source.start()
 
@@ -154,6 +163,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 vm.setHovering(true)
             }
         }
+        // `--launcher[=root|clipboard|emoji|snippets|kaomoji|files|running|windows]` (+ `--launcher-query=…`):
+        // open the launcher on start (UI checks).
+        if let arg = args.first(where: { $0.hasPrefix("--launcher") && !$0.hasPrefix("--launcher-query") }) {
+            let name = arg.split(separator: "=").dropFirst().first.map(String.init) ?? "root"
+            let mode: LauncherMode = switch name {
+            case "clipboard": .clipboard
+            case "emoji": .emoji
+            case "snippets": .snippets
+            case "kaomoji": .kaomoji
+            case "files": .files
+            case "running": .running
+            case "windows": .windows
+            default: .root
+            }
+            let q = args.first(where: { $0.hasPrefix("--launcher-query=") }).map { String($0.dropFirst("--launcher-query=".count)) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self else { return }
+                self.launcher.controller.show(mode)
+                if let q { self.launcher.controller.model.query = q }
+                if args.contains("--snapshot") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        self.launcher.controller.snapshot(name + (q.map { "-" + $0.replacingOccurrences(of: " ", with: "_") } ?? ""))
+                    }
+                }
+            }
+        }
+        // `--demo-timer[=seconds]`: start a countdown (timer wings / hover card checks).
+        if let arg = args.first(where: { $0.hasPrefix("--demo-timer") }) {
+            let secs = arg.split(separator: "=").dropFirst().first.flatMap { Double($0) } ?? 300
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.launcher.timers.startCountdown(secs) }
+        }
         if args.contains("--expand") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in self?.showHistory() }
         }
@@ -161,6 +201,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let arg = args.first(where: { $0.hasPrefix("--expand-tab=") }) {
             let tab: NotchViewModel.ExpandedTab = switch String(arg.dropFirst("--expand-tab=".count)) {
             case "devices": .devices
+            case "shelf": .shelf
             case "notifications": .notifications
             default: .home
             }
@@ -173,6 +214,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        launcher.expander.stop()
+        launcher.timers.decaffeinate()
         source.stop()
         calls.restoreMute()
     }
@@ -214,7 +257,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 keep[id] = existing
             } else {
                 let c = NotchWindowController(screen: screen, store: store, settings: settings, player: player,
-                                              lyrics: lyrics, calls: calls, power: power, hub: hub)
+                                              lyrics: lyrics, calls: calls, power: power, hub: hub, launcher: launcher)
                 c.viewModel.openSettings = { [weak self] in self?.settingsWindow.show() }
                 c.viewModel.openFullDiskAccess = { [weak self] in self?.openFullDiskAccess() }
                 keep[id] = c
@@ -260,6 +303,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.terminate(nil)
     }
 
+    private func setupLauncher() {
+        launcher.openSettingsHandler = { [weak self] page in
+            self?.settingsWindow.show(tab: page == .general ? "general" : page == .shortcuts ? "shortcuts" : "launcher")
+        }
+        launcher.showShelfHandler = { [weak self] in self?.mainViewModel?.expand(tab: .shelf) }
+        launcher.showNotificationsHandler = { [weak self] in self?.showHistory() }
+    }
+
+    /// The notch on the main target screen (built-in display first).
+    private var mainViewModel: NotchViewModel? {
+        let c = targetScreens().first.flatMap { $0.displayID }.flatMap { controllers[$0] } ?? controllers.values.first
+        return c?.viewModel
+    }
+
     private func showHistory() {
         let c = targetScreens().first.flatMap { $0.displayID }.flatMap { controllers[$0] } ?? controllers.values.first
         c?.viewModel.showExpanded()
@@ -288,6 +345,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 .target = self
         }
         menu.addItem(.separator())
+        let open = menu.addItem(withTitle: "Open Launcher", action: #selector(menuLauncher), keyEquivalent: "")
+        open.target = self
+        if let k = launcher.settings.launcherHotKey { open.title += "    \(k.display)" }
+        let clip = menu.addItem(withTitle: "Clipboard History", action: #selector(menuClipboard), keyEquivalent: "")
+        clip.target = self
+        if let k = launcher.settings.clipboardHotKey { clip.title += "    \(k.display)" }
+        menu.addItem(withTitle: "Emoji & Symbols", action: #selector(menuEmoji), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Shelf", action: #selector(menuShelf), keyEquivalent: "").target = self
+        if let t = launcher.timers.timer {
+            menu.addItem(withTitle: "Stop \(t.name) (\(t.display()))", action: #selector(menuStopTimer), keyEquivalent: "").target = self
+        }
+        if launcher.timers.isCaffeinated {
+            menu.addItem(withTitle: "Turn Off Caffeinate", action: #selector(menuDecaf), keyEquivalent: "").target = self
+        }
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Show Notifications", action: #selector(menuShowHistory), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Send Test Notification", action: #selector(menuTest), keyEquivalent: "t").target = self
         menu.addItem(.separator())
@@ -300,4 +372,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func menuShowHistory() { showHistory() }
     @objc private func menuTest() { store.injectTest() }
     @objc private func menuSettings() { settingsWindow.show() }
+    // Menus close before the launcher opens, so the previously active app is still frontmost.
+    @objc private func menuLauncher() { DispatchQueue.main.async { self.launcher.controller.show(.root) } }
+    @objc private func menuClipboard() { DispatchQueue.main.async { self.launcher.controller.show(.clipboard) } }
+    @objc private func menuEmoji() { DispatchQueue.main.async { self.launcher.controller.show(.emoji) } }
+    @objc private func menuShelf() { mainViewModel?.expand(tab: .shelf) }
+    @objc private func menuStopTimer() { launcher.timers.stop() }
+    @objc private func menuDecaf() { launcher.timers.decaffeinate() }
 }

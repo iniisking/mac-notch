@@ -91,7 +91,48 @@ own database instead of mirroring on-screen banners.
     the Batteries widget shows; BatteryCenter returns nothing to third-party apps.)
   - **Quick actions**: Devices page buttons for iPhone Mirroring and any Shortcuts you pin in Settings.
   Each feature has its own toggle in Settings › Devices & Continuity.
-- **Menu-bar bell** (no Dock icon): Show Notifications, Send Test Notification, Settings, Quit.
+- **Launcher** (Raycast-style, no AI): **⌥Space** drops a search panel out of the notch. It is a
+  non-activating panel, so the app you were in stays frontmost, and ↩ pastes straight into it.
+  Keys: ↑↓ (or ⌃N/⌃P) move, ↩ runs, ⌘↩ the second action, ⌘K lists all actions, ⌘1–9 picks a row,
+  Esc clears / goes back / closes, ⌘, opens Settings. Results learn from what you pick.
+  - **Apps** (/Applications, /System/Applications, ~/Applications, one folder deep): open, show in Finder,
+    hide, quit, force quit. **Quit Applications** lists what's running.
+  - **Files**: Spotlight name search (every word must match), most recently used first. Open, Show in Finder,
+    Quick Look, AirDrop, add to Shelf, copy, move to Trash.
+  - **Calculator**: `(2+3)*4`, `2^10`, `sqrt(2)`, `5!`, `20% of 150`, `150 + 15%`; units `5 km to mi`,
+    `72f to c`, `2 gb in mb`, `3 cups to ml`; currency `100 usd to ngn`, `$50 to eur` (daily rates from
+    open.er-api.com, cached; can be turned off); time zones `time in tokyo`, `5pm lagos in pst`.
+  - **Clipboard history** (**⌥⌘V**): text, links, colours, images and files, with a preview pane, filters
+    (Tab), pin (⌘P), delete (⌘⌫), paste as plain text (⇧↩). Concealed/transient items from password
+    managers and copies made in ignored apps are never stored. Kept in
+    `~/Library/Application Support/Notch/clipboard` (30 days / 500 items by default). Optional "Copied" moment.
+  - **Emoji & symbols** (**⌥⌘E**): every emoji the system font can draw (Unicode list + CLDR keywords,
+    bundled), frequently used first, skin tone (Tab or the hand menu), plus ⌘ ⌥ ⇧ arrows, maths and currency
+    symbols. **Kaomoji** has its own list.
+  - **Snippets**: saved text with `{date}` `{time}` `{datetime}` `{isodate}` `{day}` `{clipboard}` `{uuid}`
+    and `{cursor}`. Optional as-you-type expansion of keywords like `;addr` in any app (Input Monitoring);
+    the clipboard is restored afterwards.
+  - **Quicklinks**: `g cats`, `yt …`, `gh …`, `wiki …`, `maps …` and your own (`{query}` URLs or paths).
+    Typed domains open directly; otherwise the bottom of the list offers web searches.
+  - **Window management**: halves, quarters, thirds, two-thirds, maximize, almost maximize, center,
+    reasonable size, next/previous display, restore. Optional Rectangle-style ⌃⌥ shortcuts
+    (⌃⌥←/→/↑/↓, ⌃⌥↩, ⌃⌥C, ⌃⌥D/F/G, ⌃⌥E/T, ⌃⌥U/I/J/K, ⌃⌥⌘←/→, ⌃⌥⌫).
+  - **Timers**: `25m timer`, `timer 1h30`, Start Stopwatch, Start Pomodoro (25/5 by default). The time runs in
+    the notch wings; hover for pause / +1 min / stop. A moment and a sound mark the end of each phase.
+  - **Utilities**: Caffeinate (keep awake, IOKit assertion), Pick Color (hex copied), Copy Text from Screen
+    (select an area; Vision OCR), Screenshot to Clipboard, `remind call mum tomorrow 6pm` (Reminders, date
+    parsed from the text), `note …` (appended to a Markdown file), Run Shortcut, iPhone Mirroring.
+  - **System**: Lock Screen, Sleep, Sleep Displays, Restart / Shut Down / Log Out (macOS confirms), Toggle Dark
+    Mode, Empty Trash (press ↩ twice), Eject All Disks, Toggle Mute, Toggle Wi-Fi, Toggle Hidden Files,
+    Toggle Desktop Icons, Hide Other Apps, and the common System Settings panes.
+  Permissions: **Accessibility** for pasting, window layouts and snippet expansion (without it ↩ copies);
+  **Input Monitoring** only for snippet expansion; **Screen Recording** the first time you OCR the screen;
+  **Reminders** the first time you add one. Settings › Launcher shows their status and lets you rebind every hotkey.
+- **Shelf**: drag files onto the notch and the drop zone offers **Shelf** and **AirDrop**. Shelved files
+  (references only) live on the expanded panel's Shelf tab: drag them out, double-click to open, right-click
+  for Quick Look / AirDrop / copy / remove.
+- **Menu-bar bell** (no Dock icon): Open Launcher, Clipboard History, Emoji & Symbols, Shelf, stop a running
+  timer / Caffeinate, Show Notifications, Send Test Notification, Settings, Quit.
 - **Settings**: per-app mute list, display duration, launch at login, show on external
   displays, test notification, source status, clear history, lyrics (karaoke, second line), and
   Calls & Battery toggles.
@@ -196,7 +237,10 @@ sender is semibold and the preview dimmer; long text scrolls.
 ### Testing the UI without real notifications
 
 - Menu bar › **Send Test Notification** (⌘T while the menu is open), or the same button in Settings.
-- Launch flags: `open build/Notch.app --args --demo` injects three test notifications;
+- Launch flags: `--launcher[=root|clipboard|emoji|snippets|kaomoji|files|running|windows]` (with
+  `--launcher-query=…`) opens the launcher, `--demo-timer[=seconds]` starts a countdown, `--expand-tab=shelf`
+  opens the Shelf; with `--snapshot` the launcher is saved as `snapshots/launcher-<mode>.png`.
+  `open build/Notch.app --args --demo` injects three test notifications; `open build/Notch.app --args --demo` injects three test notifications;
   `--expand` opens the expanded panel; `--peek` pins the hover card open (for screenshots only);
   `--demo-music[=spotify|youtubemusic|youtube]` shows a fake track (stops the real helper);
   `--media-selftest` sends play/pause, pause, next, previous and pause to whatever is playing and

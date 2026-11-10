@@ -17,13 +17,13 @@ final class NotchWindowController {
     private var cancellables = Set<AnyCancellable>()
 
     init(screen: NSScreen, store: NotificationStore, settings: SettingsStore, player: NowPlayingService,
-         lyrics: LyricsService, calls: CallMonitor, power: PowerMonitor, hub: ContinuityHub) {
+         lyrics: LyricsService, calls: CallMonitor, power: PowerMonitor, hub: ContinuityHub, launcher: LauncherServices) {
         self.screen = screen
         viewModel = NotchViewModel(geometry: .detect(for: screen), store: store, settings: settings, player: player,
-                                   lyrics: lyrics, calls: calls, power: power, hub: hub)
+                                   lyrics: lyrics, calls: calls, power: power, hub: hub, launcher: launcher)
         panel = NotchPanel(contentRect: NSRect(origin: .zero, size: NotchViewModel.panelSize))
         let root = NotchRootView(vm: viewModel, store: store, settings: settings, player: player, lyrics: lyrics,
-                                 calls: calls, power: power)
+                                 calls: calls, power: power, timers: launcher.timers)
         let host = FirstMouseHostingView(rootView: root)
         host.frame = NSRect(origin: .zero, size: NotchViewModel.panelSize)
         host.autoresizingMask = [.width, .height]
@@ -108,7 +108,7 @@ final class NotchWindowController {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let state = self.viewModel.state
-                if [.expanded, .peek, .musicPeek, .callPeek, .drop].contains(state), !self.hitRect.contains(NSEvent.mouseLocation) {
+                if [.expanded, .peek, .musicPeek, .callPeek, .timerPeek, .drop].contains(state), !self.hitRect.contains(NSEvent.mouseLocation) {
                     self.viewModel.collapse()
                 }
             }
@@ -120,7 +120,7 @@ final class NotchWindowController {
     }
 
     private func beginWatchingDrag() {
-        guard viewModel.settings.airDropDropZone else { return }
+        guard viewModel.acceptsFileDrops else { return }
         dragBaseline = NSPasteboard(name: .drag).changeCount
         dragTimer?.invalidate()
         let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in

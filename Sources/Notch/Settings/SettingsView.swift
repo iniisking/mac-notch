@@ -227,7 +227,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 820)
+        .frame(width: 560, height: 800)
     }
 
     private var deviceURL: String {
@@ -255,17 +255,52 @@ struct SettingsView: View {
     }
 }
 
-/// Hosts SettingsView in a normal titled window (the app has no Dock icon).
+/// Which Settings tab is showing.
+@MainActor
+final class SettingsRouter: ObservableObject {
+    @Published var tab = "general"
+}
+
+/// Tabs: Notch (notifications, media, devices) and Launcher.
+struct SettingsRoot: View {
+    @ObservedObject var router: SettingsRouter
+    let general: SettingsView
+    let launcher: LauncherSettingsView
+    let shortcuts: CommandShortcutsView
+
+    var body: some View {
+        TabView(selection: $router.tab) {
+            general
+                .tabItem { Label("Notch", systemImage: "rectangle.topthird.inset.filled") }
+                .tag("general")
+            launcher
+                .frame(width: 560, height: 800)
+                .tabItem { Label("Launcher", systemImage: "command") }
+                .tag("launcher")
+            shortcuts
+                .frame(width: 560, height: 800)
+                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
+                .tag("shortcuts")
+        }
+    }
+}
+
+/// Hosts the settings in a normal titled window (the app has no Dock icon).
 @MainActor
 final class SettingsWindowController {
     private var window: NSWindow?
-    private let makeView: () -> SettingsView
+    private let makeView: () -> SettingsRoot
+    let router: SettingsRouter
 
-    init(makeView: @escaping () -> SettingsView) { self.makeView = makeView }
+    init(router: SettingsRouter, makeView: @escaping () -> SettingsRoot) {
+        self.router = router
+        self.makeView = makeView
+    }
 
-    func show() {
+    func show(tab: String? = nil) {
+        if let tab { router.tab = tab }
         if window == nil {
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 820),
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 840),
                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
             w.title = "Notch Settings"
             w.isReleasedWhenClosed = false

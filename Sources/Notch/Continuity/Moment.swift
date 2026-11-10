@@ -6,7 +6,7 @@ import SwiftUI
 /// an iPhone event from the Shortcuts bridge. Shown like the battery moment: one glyph per wing
 /// and a "Title - detail" strip under the notch. Click to run its action.
 struct Moment: Identifiable, Equatable {
-    enum Kind: String { case audio, clipboard, airdrop, focus, hotspot, calendar, iphone, bridge }
+    enum Kind: String { case audio, clipboard, airdrop, focus, hotspot, calendar, iphone, bridge, launcher, timer, caffeinate }
 
     enum Glyph {
         case symbol(String, Color = .white)

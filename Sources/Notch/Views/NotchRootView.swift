@@ -8,6 +8,7 @@ struct NotchRootView: View {
     @ObservedObject var lyrics: LyricsService
     @ObservedObject var calls: CallMonitor
     @ObservedObject var power: PowerMonitor
+    @ObservedObject var timers: TimerService
 
     var body: some View {
         let size = vm.shapeSize
@@ -50,6 +51,16 @@ struct NotchRootView: View {
             CompactCallView(vm: vm, calls: calls)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
+        case .timer:
+            CompactTimerView(vm: vm, timers: timers)
+                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.15)),
+                                        removal: .opacity.animation(.easeIn(duration: 0.1))))
+                .contentShape(Rectangle())
+                .onTapGesture { vm.expand() }
+        case .timerPeek:
+            TimerPeekView(vm: vm, timers: timers)
+                .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
+                                        removal: .opacity.animation(.easeIn(duration: 0.1))))
         case .callPeek:
             CallPeekView(vm: vm, calls: calls)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
@@ -68,7 +79,7 @@ struct NotchRootView: View {
                     .onTapGesture { vm.activateMoment() }
             }
         case .drop:
-            DropZoneView(vm: vm)
+            FileDropTargets(vm: vm)
                 .transition(.asymmetric(insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.1)),
                                         removal: .opacity.animation(.easeIn(duration: 0.1))))
         case .musicPeek:

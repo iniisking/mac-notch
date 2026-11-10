@@ -27,7 +27,7 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Notch reads your browser's tab addresses to tell YouTube from YouTube Music, and sends your Messages replies.</string>
+	<string>Notch reads your browser's tab addresses to tell YouTube from YouTube Music, sends your Messages replies, and runs launcher commands (dark mode, empty Trash, eject disks).</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Notch shows your AirPods and headphones, with battery levels, when they connect.</string>
 	<key>NSBonjourServices</key>
@@ -44,5 +44,9 @@
 	<string>Notch receives battery and status updates from your iPhone's Shortcuts over the local network.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>The launcher adds reminders you type ("remind call mum tomorrow 6pm").</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>The launcher adds reminders you type ("remind call mum tomorrow 6pm").</string>
 </dict>
 </plist>
