@@ -10,10 +10,12 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ENABLE_HARDENED_RUNTIME: YES
     CODE_SIGN_STYLE: Manual
-    # Xcode-IDE builds are ad-hoc signed; scripts/build.sh re-signs with your
-    # Apple Development identity so Full Disk Access survives rebuilds.
-    CODE_SIGN_IDENTITY: "-"
-    DEVELOPMENT_TEAM: ""
+    # Sign Xcode-IDE builds with a stable Apple Development identity too. Ad-hoc ("-")
+    # signing gives every build a new identity, so macOS re-asks for Accessibility,
+    # Input Monitoring, Calendars, Reminders, etc. after each rebuild.
+    # scripts/build.sh builds unsigned and re-signs itself, so it's unaffected.
+    CODE_SIGN_IDENTITY: "Apple Development: theajstars@icloud.com (RY266ZV4LA)"
+    DEVELOPMENT_TEAM: "YS6AJHQATM"
 targets:
   Notch:
     type: application

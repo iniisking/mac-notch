@@ -46,8 +46,13 @@ final class FileSearch: ObservableObject {
         stop()
         let q = NSMetadataQuery()
         // Every word must appear in the name: "inv pdf" finds "Invoice March.pdf".
-        let words = text.split(separator: " ").map(String.init)
-        let parts = words.map { NSPredicate(format: "%K CONTAINS[cd] %@", NSMetadataItemFSNameKey, $0) }
+        // Spotlight only understands ==/LIKE-style comparisons; CONTAINS throws an uncatchable
+        // ObjC exception in setSearchScopes/start. Wildcard characters in the input are stripped.
+        let words = text.split(separator: " ")
+            .map { $0.filter { $0 != "*" && $0 != "?" && $0 != "\\" } }
+            .filter { !$0.isEmpty }
+        guard !words.isEmpty else { results = []; return }
+        let parts = words.map { NSPredicate(format: "%K LIKE[cd] %@", NSMetadataItemFSNameKey, "*\($0)*") }
         q.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: parts)
         q.searchScopes = [NSMetadataQueryUserHomeScope]
         q.sortDescriptors = [NSSortDescriptor(key: NSMetadataItemLastUsedDateKey, ascending: false),
